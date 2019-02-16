@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.329
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MatasanoCryptoChallenge", "MatasanoCryptoChallenge\MatasanoCryptoChallenge.csproj", "{2957A7EA-3F29-4B1C-BEFB-B55F396335DA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{1A1FB239-041E-4B61-8520-03C3D00D0674}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2957A7EA-3F29-4B1C-BEFB-B55F396335DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2957A7EA-3F29-4B1C-BEFB-B55F396335DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2957A7EA-3F29-4B1C-BEFB-B55F396335DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2957A7EA-3F29-4B1C-BEFB-B55F396335DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A1FB239-041E-4B61-8520-03C3D00D0674}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A1FB239-041E-4B61-8520-03C3D00D0674}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A1FB239-041E-4B61-8520-03C3D00D0674}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A1FB239-041E-4B61-8520-03C3D00D0674}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {98918A95-F36B-4608-B625-08E219C88284}
+	EndGlobalSection
+EndGlobal
