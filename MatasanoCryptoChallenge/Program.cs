@@ -394,23 +394,27 @@ namespace MatasanoCryptoChallenge
             var encrypted = encrypt(new byte[0]);
             var secretLength = encrypted.Length;
 
-            var payload = new byte[secretLength * 2];
-            for (int j = 0; j < payload.Length; ++j)
-                payload[j] = (byte)'A';
+            var buffer = new byte[secretLength + blockSize - 1];
+            for (int j = 0; j < buffer.Length; ++j)
+                buffer[j] = (byte)'A';
 
-            var blockStartIdx = (secretLength - 1) / blockSize * blockSize;
+            var cipherTexts = new byte[blockSize][];
+            cipherTexts[blockSize - 1] = encrypted;
+
+            for (int j = 0; j < blockSize - 1; ++j)
+            {
+                cipherTexts[j] = encrypt(new ArraySegment<byte>(buffer, 0, blockSize - 1 - j));
+            }
 
             int i;
             for (i = 0; i < secretLength; ++i)
             {
-                encrypted = encrypt(new ArraySegment<byte>(payload, i , secretLength - 1 - i));
-
                 int guessedByte;
                 for (guessedByte = 0; guessedByte < 256; ++guessedByte)
                 {
-                    payload[secretLength - 1 + i] = (byte)guessedByte;
-                    if (AreBlocksEqual(encrypted.AsSpan(blockStartIdx, blockSize),
-                                       encrypt(new ArraySegment<byte>(payload, i, secretLength)).AsSpan(blockStartIdx, blockSize)))
+                    buffer[blockSize - 1 + i] = (byte)guessedByte;
+                    if (AreBlocksEqual(cipherTexts[i % blockSize].AsSpan(i / blockSize * blockSize, blockSize),
+                                       encrypt(new ArraySegment<byte>(buffer, i, blockSize)).AsSpan(0, blockSize)))
                     {
                         break;
                     }
@@ -420,7 +424,7 @@ namespace MatasanoCryptoChallenge
                     break;
             }
 
-            return PKCS7.StripPad(payload.AsSpan(secretLength - 1, i));
+            return PKCS7.StripPad(buffer.AsSpan(blockSize - 1, i));
         }
 
         private static bool AreBlocksEqual(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
