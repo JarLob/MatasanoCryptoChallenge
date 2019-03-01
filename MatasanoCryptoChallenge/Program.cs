@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -54,6 +53,11 @@ namespace MatasanoCryptoChallenge
             }
             return output;
         }
+
+        public static Span<byte> StripPad(Span<byte> data)
+        {
+            return data.Slice(0, data.Length - data[data.Length - 1]);
+        }
     }
 
     public static class MyAes
@@ -94,6 +98,14 @@ namespace MatasanoCryptoChallenge
             {
                 throw new NotImplementedException();
             }
+        }
+
+        public static byte[] PaddingEncrypt(RandomNumberGenerator rnd, byte[] key, ArraySegment<byte> plainText, byte[] after)
+        {
+            var appended = new byte[plainText.Count + after.Length];
+            plainText.CopyTo(appended);
+            Array.Copy(after, 0, appended, plainText.Count, after.Length);
+            return Encrypt(appended, key, CipherMode.ECB);
         }
 
         private static byte[] DecryptEcb(byte[] cipher, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
@@ -337,13 +349,13 @@ namespace MatasanoCryptoChallenge
 
     public static class AesOracle
     {
-        public static CipherMode GuessMode(byte[] cipher)
+        public static CipherMode GuessMode(byte[] encrypted, int blockSize)
         {
-            for (int x = 0; x < cipher.Length / 16; ++x)
+            for (int x = 0; x < encrypted.Length / blockSize; ++x)
             {
-                for (int y =  x + 1; y < cipher.Length / 16; ++y)
+                for (int y = x + 1; y < encrypted.Length / blockSize; ++y)
                 {
-                    if (AreBlocksEqual(cipher.AsSpan(x * 16, 16), cipher.AsSpan(y * 16, 16)))
+                    if (AreBlocksEqual(encrypted.AsSpan(x * blockSize, blockSize), encrypted.AsSpan(y * blockSize, blockSize)))
                     {
                         return CipherMode.ECB;
                     }
@@ -351,6 +363,64 @@ namespace MatasanoCryptoChallenge
             }
 
             return CipherMode.CBC;
+        }
+
+        public static int GuessBlockSize(Func<ArraySegment<byte>, byte[]> encrypt)
+        {
+            var payload = new byte[100];
+            int blockSize = 1;
+            int changedSize = 0;
+            int encryptedSize = 0;
+            for (; blockSize < payload.Length; ++blockSize)
+            {
+                var encrypted = encrypt(new ArraySegment<byte>(payload, 0, blockSize));
+                if (encryptedSize != encrypted.Length)
+                {
+                    ++changedSize;
+                    if (changedSize == 2)
+                    {
+                        return encrypted.Length - encryptedSize;
+                    }
+
+                    encryptedSize = encrypted.Length;
+                }
+            }
+
+            return -1;
+        }
+
+        public static Span<byte> ByteAtATimeEcb(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt)
+        {
+            var encrypted = encrypt(new byte[0]);
+            var secretLength = encrypted.Length;
+
+            var payload = new byte[secretLength * 2];
+            for (int j = 0; j < payload.Length; ++j)
+                payload[j] = (byte)'A';
+
+            var blockStartIdx = (secretLength - 1) / blockSize * blockSize;
+
+            int i;
+            for (i = 0; i < secretLength; ++i)
+            {
+                encrypted = encrypt(new ArraySegment<byte>(payload, i , secretLength - 1 - i));
+
+                int guessedByte;
+                for (guessedByte = 0; guessedByte < 256; ++guessedByte)
+                {
+                    payload[secretLength - 1 + i] = (byte)guessedByte;
+                    if (AreBlocksEqual(encrypted.AsSpan(blockStartIdx, blockSize),
+                                       encrypt(new ArraySegment<byte>(payload, i, secretLength)).AsSpan(blockStartIdx, blockSize)))
+                    {
+                        break;
+                    }
+                }
+
+                if (guessedByte == 256)
+                    break;
+            }
+
+            return PKCS7.StripPad(payload.AsSpan(secretLength - 1, i));
         }
 
         private static bool AreBlocksEqual(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
@@ -392,14 +462,6 @@ namespace MatasanoCryptoChallenge
                 var mode = m % 2 == 0 ? CipherMode.CBC : CipherMode.ECB;
                 return (MyAes.Encrypt(appended, key, mode), mode);
             }
-        }
-
-        public static byte[] PaddingEncrypt(RandomNumberGenerator rnd, byte[] key, ArraySegment<byte> plainText, byte[] after)
-        {
-            var appended = new byte[plainText.Count + after.Length];
-            plainText.CopyTo(appended);
-            Array.Copy(after, 0, appended, plainText.Count, after.Length);
-            return MyAes.Encrypt(appended, key, CipherMode.ECB);
         }
     }
 }

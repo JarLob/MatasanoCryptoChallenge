@@ -40,7 +40,7 @@ namespace Tests
             var candidates = new List<(string plainText, byte key, double score)>(lines.Length);
             foreach (var line in lines)
             {
-                candidates.Add(Xor.XorBestMatch((Hex.ToBytes(line))));
+                candidates.Add(Xor.XorBestMatch(Hex.ToBytes(line)));
             }
 
             Assert.Equal("Now that the party is jumping\n", candidates.OrderByDescending(x => x.score).First().plainText);
