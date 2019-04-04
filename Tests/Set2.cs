@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using MatasanoCryptoChallenge;
@@ -92,6 +93,33 @@ namespace Tests
                 var secretText = Encoding.UTF8.GetString(secretSuffix);
                 Assert.Equal(secretText, plainText);
             }
+        }
+
+        [Fact]
+        public void Challenge13_ECB_cut_and_paste()
+        {
+            var textQuery = "foo=bar&baz=qux&zap=zazzle";
+            var query     = HttpQuery.Parse(textQuery);
+            Assert.Equal(query, new[]
+            {
+                ("foo", "bar"),
+                ("baz", "qux"),
+                ("zap", "zazzle")
+            });
+
+            Assert.Equal(HttpQuery.Compile(query), textQuery);
+
+            var oracle = new UserProfileOracle();
+            var cipher = oracle.CreateFor("test@test.com");
+            Assert.Equal("test@test.com", oracle.Decrypt(cipher).First().value);
+
+            var cipher1 = oracle.CreateFor("foo22@bar.com");
+            var cipher2 = oracle.CreateFor("          admin\xb\xb\xb\xb\xb\xb\xb\xb\xb\xb\xb");
+            cipher = new byte[16 * 3];
+            Array.Copy(cipher1, cipher, 16 * 2);
+            Array.Copy(cipher2, 16, cipher, 16 * 2, 16);
+            Assert.Equal("admin", oracle.Decrypt(cipher).Last().value);
+            Assert.Equal("foo22@bar.com", oracle.Decrypt(cipher).First().value);
         }
     }
 }

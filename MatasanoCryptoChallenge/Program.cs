@@ -468,4 +468,71 @@ namespace MatasanoCryptoChallenge
             }
         }
     }
+
+    public static class HttpQuery
+    {
+        public static List<(string key, string value)> Parse(string query)
+        {
+            var obj = new List<(string key, string value)>();
+            foreach (var pair in query.Split('&'))
+            {
+                var keyVal = pair.Split('=');
+                if (keyVal.Length != 2)
+                    throw new Exception();
+
+                obj.Add((keyVal[0], keyVal[1]));
+            }
+
+            return obj;
+        }
+
+        public static string Compile(List<(string key, string value)> obj)
+        {
+            var query = new StringBuilder();
+            foreach (var pair in obj)
+            {
+                if (query.Length != 0)
+                    query.Append('&');
+
+                query.Append($"{pair.key}={pair.value}");
+            }
+
+            return query.ToString();
+        }
+    }
+
+    public class UserProfileOracle
+    {
+        private byte[] Key;
+
+        public UserProfileOracle()
+        {
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                Key = new byte[16];
+                rnd.GetBytes(Key);
+            }
+        }
+
+        public byte[] CreateFor(string email)
+        {
+            if (email.Any(x => x == '&' || x == '='))
+                throw new Exception();
+
+            var obj = new List<(string key, string value)>(3)
+            {
+                ("email", email),
+                ("uid", "10"),
+                ("role", "user")
+            };
+
+            return MyAes.Encrypt(Encoding.UTF8.GetBytes(HttpQuery.Compile(obj)), Key, CipherMode.ECB);
+        }
+
+        public List<(string key, string value)> Decrypt(byte[] cipher)
+        {
+            var plainText = Encoding.UTF8.GetString(MyAes.Decrypt(cipher, Key, CipherMode.ECB));
+            return HttpQuery.Parse(plainText);
+        }
+    }
 }
