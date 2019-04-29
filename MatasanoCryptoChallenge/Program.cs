@@ -56,7 +56,20 @@ namespace MatasanoCryptoChallenge
 
         public static Span<byte> StripPad(Span<byte> data)
         {
-            return data.Slice(0, data.Length - data[data.Length - 1]);
+            if (data.Length == 0)
+                throw new Exception();
+
+            var pads = data[data.Length - 1];
+            if (pads < 1 || pads > data.Length)
+                throw new Exception();
+
+            for (int i = 1; i < pads; ++i)
+            {
+                if (data[data.Length - i - 1] != pads)
+                    throw new Exception();
+            }
+
+            return data.Slice(0, data.Length - pads);
         }
     }
 

@@ -156,5 +156,15 @@ namespace Tests
                 Assert.Equal(secretText, plainText);
             }
         }
+
+        [Fact]
+        public void Challenge15_PKCS7_padding_validation()
+        {
+            Assert.Equal("ICE ICE BABY\x04\x04\x04\x04", Encoding.UTF8.GetString(PKCS7.Pad(Encoding.UTF8.GetBytes("ICE ICE BABY"), 16)));
+            Assert.Equal("ICE ICE BABY", Encoding.UTF8.GetString(PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x04\x04\x04\x04"))));
+
+            Assert.Throws<Exception>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x05\x05\x05\x05")));
+            Assert.Throws<Exception>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x01\x02\x03\x04")));
+        }
     }
 }
