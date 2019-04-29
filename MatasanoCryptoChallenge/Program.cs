@@ -100,11 +100,20 @@ namespace MatasanoCryptoChallenge
             }
         }
 
-        public static byte[] PaddingEncrypt(RandomNumberGenerator rnd, byte[] key, ArraySegment<byte> plainText, byte[] after)
+        public static byte[] Encrypt(ArraySegment<byte> data, byte[] dataSuffix, byte[] key)
         {
-            var appended = new byte[plainText.Count + after.Length];
-            plainText.CopyTo(appended);
-            Array.Copy(after, 0, appended, plainText.Count, after.Length);
+            var appended = new byte[data.Count + dataSuffix.Length];
+            data.CopyTo(appended);
+            Array.Copy(dataSuffix, 0, appended, data.Count, dataSuffix.Length);
+            return Encrypt(appended, key, CipherMode.ECB);
+        }
+
+        public static byte[] Encrypt(byte[] dataPrefix, ArraySegment<byte> data, byte[] dataSuffix, byte[] key)
+        {
+            var appended = new byte[dataPrefix.Length + data.Count + dataSuffix.Length];
+            Array.Copy(dataPrefix, 0, appended, 0, dataPrefix.Length);
+            data.CopyTo(appended, dataPrefix.Length);
+            Array.Copy(dataSuffix, 0, appended, dataPrefix.Length + data.Count, dataSuffix.Length);
             return Encrypt(appended, key, CipherMode.ECB);
         }
 
@@ -386,45 +395,81 @@ namespace MatasanoCryptoChallenge
                 }
             }
 
-            return -1;
+            throw new Exception();
         }
 
-        public static Span<byte> ByteAtATimeEcb(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt)
+        public static int GetPrefixLength(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt)
         {
-            var encrypted = encrypt(new byte[0]);
-            var secretLength = encrypted.Length;
+            var payload = new byte[blockSize + 1];
 
-            var buffer = new byte[secretLength + blockSize - 1];
-            for (int j = 0; j < buffer.Length; ++j)
-                buffer[j] = (byte)'A';
+            var encrypted1 = encrypt(payload);
+            payload[0] = 1;
+            var encrypted2 = encrypt(payload);
+            var blockNr = GetFirstDifferentBlock(encrypted1, encrypted2, blockSize);
 
-            var cipherTexts = new byte[blockSize][];
-            cipherTexts[blockSize - 1] = encrypted;
-
-            for (int j = 0; j < blockSize - 1; ++j)
+            for (int i = 1; i < payload.Length; ++i)
             {
-                cipherTexts[j] = encrypt(new ArraySegment<byte>(buffer, 0, blockSize - 1 - j));
+                payload[i - 1] = 0;
+                payload[i] = 1;
+                encrypted2 = encrypt(payload);
+                if (GetFirstDifferentBlock(encrypted1, encrypted2, blockSize) != blockNr)
+                    return blockSize * blockNr + (blockSize - i);
+            }
+
+            throw new Exception();
+        }
+
+        private static int GetFirstDifferentBlock(byte[] array1, byte[] array2, int blockSize)
+        {
+            if (array1.Length != array2.Length)
+                throw new Exception();
+
+            int blockNr;
+            for (blockNr = 0; blockNr < array1.Length / blockSize; ++blockNr)
+            {
+                if (!AreBlocksEqual(array1.AsSpan(blockNr * blockSize, blockSize), array2.AsSpan(blockNr * blockSize, blockSize)))
+                    return blockNr;
+            }
+                
+            throw new Exception();
+        }
+
+        public static Span<byte> ByteAtATimeEcb(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt, int prefixLength = 0)
+        {
+            if (prefixLength < 0)
+                throw new Exception();
+
+            var encrypted = encrypt(new byte[0]);
+            var suffixLength = encrypted.Length - prefixLength;
+            var prefixPaddingLength = prefixLength > 0 ? blockSize - (prefixLength % blockSize) : 0;
+
+            var buffer = new byte[prefixPaddingLength + blockSize - 1 + suffixLength];
+            var cipherTexts = new byte[blockSize][];
+
+            for (int j = 0; j < blockSize; ++j)
+            {
+                cipherTexts[j] = encrypt(new ArraySegment<byte>(buffer, 0, prefixPaddingLength + blockSize - 1 - j));
             }
 
             int i;
-            for (i = 0; i < secretLength; ++i)
+            for (i = 0; i < buffer.Length - prefixPaddingLength - blockSize + 1; ++i)
             {
                 int guessedByte;
-                for (guessedByte = 0; guessedByte < 256; ++guessedByte)
+                for (guessedByte = 255; guessedByte >= 0; --guessedByte)
                 {
-                    buffer[blockSize - 1 + i] = (byte)guessedByte;
-                    if (AreBlocksEqual(cipherTexts[i % blockSize].AsSpan(i / blockSize * blockSize, blockSize),
-                                       encrypt(new ArraySegment<byte>(buffer, i, blockSize)).AsSpan(0, blockSize)))
+                    buffer[prefixPaddingLength + blockSize - 1 + i] = (byte)guessedByte;
+                    if (AreBlocksEqual(cipherTexts[i % blockSize].AsSpan(prefixLength + prefixPaddingLength + i / blockSize * blockSize, blockSize),
+                                       encrypt(new ArraySegment<byte>(buffer, i, prefixPaddingLength + blockSize)).AsSpan(prefixLength + prefixPaddingLength, blockSize)))
                     {
                         break;
                     }
                 }
 
-                if (guessedByte == 256)
+                if (guessedByte == -1)
                     break;
             }
 
-            return PKCS7.StripPad(buffer.AsSpan(blockSize - 1, i));
+            return PKCS7.StripPad(buffer.AsSpan(prefixPaddingLength + blockSize - 1, i));
         }
 
         private static bool AreBlocksEqual(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)

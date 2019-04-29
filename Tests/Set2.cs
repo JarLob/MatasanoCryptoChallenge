@@ -56,8 +56,6 @@ namespace Tests
         {
             int size = 16 * 3;
             var payload = new byte[size];
-            for (int i = 0; i < size; ++i)
-                payload[i] = (byte)'A';
 
             for (int i = 0; i < 100; ++i)
             {
@@ -78,17 +76,19 @@ namespace Tests
                 var key = new byte[16];
                 rnd.GetBytes(key);
 
-                var blockSize = AesOracle.GuessBlockSize(data => MyAes.PaddingEncrypt(rnd, key, data, secretSuffix));
+                Func<ArraySegment<byte>, byte[]> encrypt = data => MyAes.Encrypt(data, secretSuffix, key);
+
+                var blockSize = AesOracle.GuessBlockSize(encrypt);
                 Assert.Equal(16, blockSize);
 
                 var payload = new byte[3 * blockSize];
-                for (int i = 0; i < payload.Length; ++i)
-                    payload[i] = (byte)'A';
-
-                var encrypted = MyAes.PaddingEncrypt(rnd, key, payload, secretSuffix);
+                var encrypted = encrypt(payload);
                 Assert.Equal(CipherMode.ECB, AesOracle.GuessMode(encrypted, blockSize));
 
-                var decrypted = AesOracle.ByteAtATimeEcb(blockSize, data => MyAes.PaddingEncrypt(rnd, key, data, secretSuffix));
+                var calculatedPrefixLength = AesOracle.GetPrefixLength(blockSize, encrypt);
+                Assert.Equal(0, calculatedPrefixLength);
+
+                var decrypted = AesOracle.ByteAtATimeEcb(blockSize, encrypt);
                 var plainText = Encoding.UTF8.GetString(decrypted);
                 var secretText = Encoding.UTF8.GetString(secretSuffix);
                 Assert.Equal(secretText, plainText);
@@ -120,6 +120,41 @@ namespace Tests
             Array.Copy(cipher2, 16, cipher, 16 * 2, 16);
             Assert.Equal("admin", oracle.Decrypt(cipher).Last().value);
             Assert.Equal("foo22@bar.com", oracle.Decrypt(cipher).First().value);
+        }
+
+        [Fact]
+        public void Challenge14_Byte_at_a_time_ECB_decryption_harder()
+        {
+            var secretSuffix = Convert.FromBase64String(
+                "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK");
+
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                var prefixLength = rnd.GetInt(0, 256);
+                Assert.True(prefixLength >= 0);
+                var prefix = new byte[prefixLength];
+                rnd.GetBytes(prefix);
+
+                Func<ArraySegment<byte>, byte[]> encrypt = data => MyAes.Encrypt(prefix, data, secretSuffix, key);
+
+                var blockSize = AesOracle.GuessBlockSize(encrypt);
+                Assert.Equal(16, blockSize);
+
+                var payload = new byte[3 * blockSize];
+                var encrypted = encrypt(payload);
+                Assert.Equal(CipherMode.ECB, AesOracle.GuessMode(encrypted, blockSize));
+
+                var calculatedPrefixLength = AesOracle.GetPrefixLength(blockSize, encrypt);
+                Assert.Equal(prefixLength, calculatedPrefixLength);
+
+                var decrypted = AesOracle.ByteAtATimeEcb(blockSize, encrypt, calculatedPrefixLength);
+                var plainText = Encoding.UTF8.GetString(decrypted);
+                var secretText = Encoding.UTF8.GetString(secretSuffix);
+                Assert.Equal(secretText, plainText);
+            }
         }
     }
 }
