@@ -75,14 +75,6 @@ namespace MatasanoCryptoChallenge
 
     public static class MyAes
     {
-        public static byte[] Decrypt(byte[] cipher, byte[] key, CipherMode mode)
-        {
-            if (mode != CipherMode.ECB)
-                throw new NotImplementedException();
-
-            return DecryptEcb(cipher, key);
-        }
-
         public static byte[] Encrypt(byte[] data, byte[] key, CipherMode mode)
         {
             if (mode == CipherMode.ECB)
@@ -130,13 +122,18 @@ namespace MatasanoCryptoChallenge
             return Encrypt(appended, key, CipherMode.ECB);
         }
 
-        private static byte[] DecryptEcb(byte[] cipher, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
+        public static byte[] Decrypt(byte[] cipher, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
         {
             using (var aes = Aes.Create())
             {
                 aes.Key  = key;
-                aes.Mode = CipherMode.ECB;
+                aes.Mode = mode;
                 aes.Padding = padding;
+
+                if (aes.Mode == CipherMode.CBC)
+                {
+                    aes.IV = new byte[16];
+                }
 
                 using (var decr = aes.CreateDecryptor())
                 {
@@ -529,12 +526,12 @@ namespace MatasanoCryptoChallenge
 
     public static class HttpQuery
     {
-        public static List<(string key, string value)> Parse(string query)
+        public static List<(string key, string value)> Parse(string query, char pairDelimiter = '&', char keyValueDelimiter = '=')
         {
             var obj = new List<(string key, string value)>();
-            foreach (var pair in query.Split('&'))
+            foreach (var pair in query.Split(pairDelimiter))
             {
-                var keyVal = pair.Split('=');
+                var keyVal = pair.Split(keyValueDelimiter);
                 if (keyVal.Length != 2)
                     throw new Exception();
 
@@ -544,15 +541,15 @@ namespace MatasanoCryptoChallenge
             return obj;
         }
 
-        public static string Compile(List<(string key, string value)> obj)
+        public static string Compile(List<(string key, string value)> obj, char pairDelimiter = '&', char keyValueDelimiter = '=')
         {
             var query = new StringBuilder();
             foreach (var pair in obj)
             {
                 if (query.Length != 0)
-                    query.Append('&');
+                    query.Append(pairDelimiter);
 
-                query.Append($"{pair.key}={pair.value}");
+                query.Append($"{pair.key}{keyValueDelimiter}{pair.value}");
             }
 
             return query.ToString();

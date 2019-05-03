@@ -166,5 +166,45 @@ namespace Tests
             Assert.Throws<Exception>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x05\x05\x05\x05")));
             Assert.Throws<Exception>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x01\x02\x03\x04")));
         }
+
+        [Fact]
+        public void Challenge16_CBC_bitflipping_attacks()
+        {
+            var userdata = "0123456789012345";
+            var prefix = "comment1=cooking%20MCs;userdata=";
+            var suffix = ";comment2=%20like%20a%20pound%20of%20bacon";
+            var input = $"{prefix}{userdata}{suffix}";
+
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                var encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), key, CipherMode.CBC);
+                var target = ";admin=true;a=";
+                for (int i = 0; i < target.Length; ++i)
+                {
+                    encrypted[2 * 16 + i] ^= (byte)(target[i] ^ input[3 * 16 + i]);
+                }
+
+                var decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC));
+                var values = HttpQuery.Parse(decrypted, ';', '=');
+                var admin = values.FirstOrDefault(x => x.key == "admin");
+                Assert.Equal("true", admin.value);
+
+                userdata = $"0123456789012345\0admin\0true";
+                input = $"{prefix}{userdata}{suffix}";
+                encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), key, CipherMode.CBC);
+                encrypted[2 * 16 + 0] ^= (byte)(';' ^ input[3 * 16 + 0]);
+                encrypted[2 * 16 + 6] ^= (byte)('=' ^ input[3 * 16 + 6]);
+
+                decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC));
+                values = HttpQuery.Parse(decrypted, ';', '=');
+                admin = values.FirstOrDefault(x => x.key == "admin");
+                Assert.Equal("true", admin.value);
+                Assert.StartsWith(prefix, decrypted);
+                Assert.EndsWith(suffix, decrypted);
+            }
+        }
     }
 }
