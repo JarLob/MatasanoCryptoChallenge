@@ -25,7 +25,7 @@ namespace Tests
             byte[] key = Encoding.UTF8.GetBytes("ss012345678901234567890123456789");
             byte[] iv = new byte[16];
 
-            cipher = MyAes.Encrypt(data, key, CipherMode.CBC);
+            cipher = MyAes.Encrypt(data, iv, key, CipherMode.CBC);
 
             using (var aes2 = new AesCryptoServiceProvider())
             {
@@ -163,8 +163,8 @@ namespace Tests
             Assert.Equal("ICE ICE BABY\x04\x04\x04\x04", Encoding.UTF8.GetString(PKCS7.Pad(Encoding.UTF8.GetBytes("ICE ICE BABY"), 16)));
             Assert.Equal("ICE ICE BABY", Encoding.UTF8.GetString(PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x04\x04\x04\x04"))));
 
-            Assert.Throws<Exception>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x05\x05\x05\x05")));
-            Assert.Throws<Exception>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x01\x02\x03\x04")));
+            Assert.Throws<CryptographicException>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x05\x05\x05\x05")));
+            Assert.Throws<CryptographicException>(() => PKCS7.StripPad(Encoding.UTF8.GetBytes("ICE ICE BABY\x01\x02\x03\x04")));
         }
 
         [Fact]
@@ -180,25 +180,28 @@ namespace Tests
                 var key = new byte[16];
                 rnd.GetBytes(key);
 
-                var encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), key, CipherMode.CBC);
+                var iv = new byte[16];
+                rnd.GetBytes(iv);
+
+                var encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), iv, key, CipherMode.CBC);
                 var target = ";admin=true;a=";
                 for (int i = 0; i < target.Length; ++i)
                 {
                     encrypted[2 * 16 + i] ^= (byte)(target[i] ^ input[3 * 16 + i]);
                 }
 
-                var decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC));
+                var decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC, iv));
                 var values = HttpQuery.Parse(decrypted, ';', '=');
                 var admin = values.FirstOrDefault(x => x.key == "admin");
                 Assert.Equal("true", admin.value);
 
                 userdata = $"0123456789012345\0admin\0true";
                 input = $"{prefix}{userdata}{suffix}";
-                encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), key, CipherMode.CBC);
+                encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), iv, key, CipherMode.CBC);
                 encrypted[2 * 16 + 0] ^= (byte)(';' ^ input[3 * 16 + 0]);
                 encrypted[2 * 16 + 6] ^= (byte)('=' ^ input[3 * 16 + 6]);
 
-                decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC));
+                decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC, iv));
                 values = HttpQuery.Parse(decrypted, ';', '=');
                 admin = values.FirstOrDefault(x => x.key == "admin");
                 Assert.Equal("true", admin.value);

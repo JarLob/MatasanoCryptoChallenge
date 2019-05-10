@@ -54,19 +54,19 @@ namespace MatasanoCryptoChallenge
             return output;
         }
 
-        public static Span<byte> StripPad(Span<byte> data)
+        public static ReadOnlySpan<byte> StripPad(ReadOnlySpan<byte> data)
         {
             if (data.Length == 0)
                 throw new Exception();
 
             var pads = data[data.Length - 1];
             if (pads < 1 || pads > data.Length)
-                throw new Exception();
+                throw new CryptographicException("Padding is invalid and cannot be removed.");
 
             for (int i = 1; i < pads; ++i)
             {
                 if (data[data.Length - i - 1] != pads)
-                    throw new Exception();
+                    throw new CryptographicException("Padding is invalid and cannot be removed.");
             }
 
             return data.Slice(0, data.Length - pads);
@@ -75,7 +75,7 @@ namespace MatasanoCryptoChallenge
 
     public static class MyAes
     {
-        public static byte[] Encrypt(byte[] data, byte[] key, CipherMode mode)
+        public static byte[] Encrypt(byte[] data, byte[] iv, byte[] key, CipherMode mode)
         {
             if (mode == CipherMode.ECB)
             {
@@ -85,7 +85,7 @@ namespace MatasanoCryptoChallenge
             {
                 var len = data.Length / 16 + 1;
                 var output = new byte[len * 16];
-                var prevBlock = new byte[16];
+                var prevBlock = iv;
                 int i = 0;
                 for (; i < len - 1; i++)
                 {
@@ -110,7 +110,7 @@ namespace MatasanoCryptoChallenge
             var appended = new byte[data.Count + dataSuffix.Length];
             data.CopyTo(appended);
             Array.Copy(dataSuffix, 0, appended, data.Count, dataSuffix.Length);
-            return Encrypt(appended, key, CipherMode.ECB);
+            return Encrypt(appended, null, key, CipherMode.ECB);
         }
 
         public static byte[] Encrypt(byte[] dataPrefix, ArraySegment<byte> data, byte[] dataSuffix, byte[] key)
@@ -119,10 +119,10 @@ namespace MatasanoCryptoChallenge
             Array.Copy(dataPrefix, 0, appended, 0, dataPrefix.Length);
             data.CopyTo(appended, dataPrefix.Length);
             Array.Copy(dataSuffix, 0, appended, dataPrefix.Length + data.Count, dataSuffix.Length);
-            return Encrypt(appended, key, CipherMode.ECB);
+            return Encrypt(appended, null, key, CipherMode.ECB);
         }
 
-        public static byte[] Decrypt(byte[] cipher, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
+        public static byte[] Decrypt(byte[] cipher, byte[] key, CipherMode mode, byte[] iv = null, PaddingMode padding = PaddingMode.PKCS7)
         {
             using (var aes = Aes.Create())
             {
@@ -132,7 +132,10 @@ namespace MatasanoCryptoChallenge
 
                 if (aes.Mode == CipherMode.CBC)
                 {
-                    aes.IV = new byte[16];
+                    if (iv == default)
+                        throw new Exception();
+
+                    aes.IV = iv;
                 }
 
                 using (var decr = aes.CreateDecryptor())
@@ -141,6 +144,26 @@ namespace MatasanoCryptoChallenge
                     return text;
                 }
             }
+        }
+
+        public static ReadOnlySpan<byte> DecryptCBCWithPadding(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, byte[] key)
+        {
+            var blocks = cipher.Length / 16;
+            var output = new byte[cipher.Length];
+            for (int i = blocks - 1; i >= 0; --i)
+            {
+                ReadOnlySpan<byte> prevBlock;
+                if (i == 0)
+                    prevBlock = iv;
+                else
+                    prevBlock = cipher.Slice((i - 1) * 16, 16);
+
+                var decryptedBlock = Decrypt(cipher.Slice(i * 16, 16).ToArray(), key, CipherMode.ECB, iv: null, PaddingMode.None);
+                var xored = Xor.ApplyFixed(prevBlock, decryptedBlock);
+                Array.Copy(xored, 0, output, i * 16, 16);
+            }
+
+            return PKCS7.StripPad(output);
         }
 
         private static byte[] EncryptEcb(byte[] data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
@@ -225,7 +248,7 @@ namespace MatasanoCryptoChallenge
 
     public static class Xor
     {
-        public static byte[] ApplyFixed(byte[] bytesData, ReadOnlySpan<byte> bytesKey)
+        public static byte[] ApplyFixed(ReadOnlySpan<byte> bytesData, ReadOnlySpan<byte> bytesKey)
         {
             if (bytesData.Length != bytesKey.Length)
                 throw new Exception();
@@ -366,6 +389,80 @@ namespace MatasanoCryptoChallenge
         }
     }
 
+    public static class CbcPaddingOracle
+    {
+        public static ReadOnlySpan<byte> Decrypt(byte[] encrypted, byte[] iv, byte[] key)
+        {
+            if (encrypted.Length % 16 != 0)
+                throw new Exception();
+
+            var decrypted = new byte[encrypted.Length];
+
+            var blocks = encrypted.Length / 16;
+            for (int block = blocks - 1; block >= 0; --block)
+            {
+                Span<byte> prevBlock;
+                if (block == 0)
+                    prevBlock = iv;
+                else
+                    prevBlock = encrypted.AsSpan((block - 1) * 16, 16);
+
+                var blockCopy = new byte[16];
+                prevBlock.CopyTo(blockCopy);
+
+                for (int i = 15; i >= 0; --i,
+                                         blockCopy.CopyTo(prevBlock))
+                {
+                    // set bytes past the current index to produce needed padding as
+                    // "0x02" or "0x03 0x03" or "0x04 0x04 0x04" etc.
+                    // by using already decrypted values
+                    for (int n = 15; n > i; --n)
+                    {
+                        prevBlock[n] = (byte)(blockCopy[n] ^ decrypted[block * 16 + n] ^ (16 - i));
+                    }
+
+                    for (int b = 0; b <= 256; ++b)
+                    {
+                        if (b == 256)
+                            throw new Exception("byte wasn't found");
+
+                        prevBlock[i] = (byte)b;
+                        if (Validate(encrypted.AsSpan(block * 16, 16), prevBlock, key))
+                        {
+                            if (i != 0)
+                            {
+                                // We are looking for "0xAny 0x01" padding
+                                // But may accidentally find "0x02 0x02"
+                                // Let's modify i - 1 byte. If the first case the byte is not used for padding and doesn't affect validation
+                                prevBlock[i - 1] += 1;
+                                if (!Validate(encrypted.AsSpan(block * 16, 16), prevBlock, key))
+                                    continue;
+                            }
+
+                            decrypted[block * 16 + i] = (byte)(b ^ (16 - i) ^ blockCopy[i]);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return PKCS7.StripPad(decrypted);
+        }
+
+        private static bool Validate(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv, byte[] key)
+        {
+            try
+            {
+                MyAes.DecryptCBCWithPadding(encrypted, iv, key);
+                return true;
+            }
+            catch (CryptographicException e) when (e.Message == "Padding is invalid and cannot be removed.")
+            {
+                return false;
+            }
+        }
+    }
+
     public static class AesOracle
     {
         public static CipherMode GuessMode(byte[] encrypted, int blockSize)
@@ -444,7 +541,7 @@ namespace MatasanoCryptoChallenge
             throw new Exception();
         }
 
-        public static Span<byte> ByteAtATimeEcb(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt, int prefixLength = 0)
+        public static ReadOnlySpan<byte> ByteAtATimeEcb(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt, int prefixLength = 0)
         {
             if (prefixLength < 0)
                 throw new Exception();
@@ -519,9 +616,11 @@ namespace MatasanoCryptoChallenge
 
                 var m = rnd.GetInt(0, 1);
                 var mode = m % 2 == 0 ? CipherMode.CBC : CipherMode.ECB;
-                return (MyAes.Encrypt(appended, key, mode), mode);
+                return (MyAes.Encrypt(appended, IV, key, mode), mode);
             }
         }
+
+        private static byte[] IV = new byte[16];
     }
 
     public static class HttpQuery
@@ -581,7 +680,7 @@ namespace MatasanoCryptoChallenge
                 ("role", "user")
             };
 
-            return MyAes.Encrypt(Encoding.UTF8.GetBytes(HttpQuery.Compile(obj)), Key, CipherMode.ECB);
+            return MyAes.Encrypt(Encoding.UTF8.GetBytes(HttpQuery.Compile(obj)), null, Key, CipherMode.ECB);
         }
 
         public List<(string key, string value)> Decrypt(byte[] cipher)
