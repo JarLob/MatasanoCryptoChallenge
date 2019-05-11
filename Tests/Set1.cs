@@ -98,9 +98,8 @@ namespace Tests
             var base64 = File.ReadAllText("7.txt").Replace("\n", "");
             var cipher = Convert.FromBase64String(base64);
             Assert.Equal("I'm back and I'm ringin' the bell ",
-                         Encoding.UTF8.GetString(MyAes.Decrypt(cipher,
-                                                               Encoding.UTF8.GetBytes("YELLOW SUBMARINE"),
-                                                               CipherMode.ECB)).Split('\n')[0]);
+                         Encoding.UTF8.GetString(MyAes.DecryptEcb(cipher,
+                                                                  Encoding.UTF8.GetBytes("YELLOW SUBMARINE"))).Split('\n')[0]);
         }
 
         [Fact]

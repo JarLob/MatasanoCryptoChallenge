@@ -40,14 +40,14 @@ namespace MatasanoCryptoChallenge
 
     public static class PKCS7
     {
-        public static byte[] Pad(ArraySegment<byte> data, byte blockSize)
+        public static byte[] Pad(ReadOnlySpan<byte> data, byte blockSize)
         {
-            byte mod = (byte)(data.Count % blockSize);
+            byte mod = (byte)(data.Length % blockSize);
             byte padSize = mod == 0 ? blockSize : (byte)(blockSize - mod);
-            var output = new byte[data.Count + padSize];
-            data.CopyTo(output, 0);
+            var output = new byte[data.Length + padSize];
+            data.CopyTo(output);
 
-            for (int i = data.Count; i < output.Length; ++i)
+            for (int i = data.Length; i < output.Length; ++i)
             {
                 output[i] = padSize;
             }
@@ -75,59 +75,121 @@ namespace MatasanoCryptoChallenge
 
     public static class MyAes
     {
-        public static byte[] Encrypt(byte[] data, byte[] iv, byte[] key, CipherMode mode)
+        public static byte[] EncryptEcb(ReadOnlySpan<byte> data, ReadOnlySpan<byte> dataSuffix, byte[] key)
         {
-            if (mode == CipherMode.ECB)
-            {
-                return EncryptEcb(data, key);
-            }
-            else if (mode == CipherMode.CBC)
-            {
-                var len = data.Length / 16 + 1;
-                var output = new byte[len * 16];
-                var prevBlock = iv;
-                int i = 0;
-                for (; i < len - 1; i++)
-                {
-                    var xored = Xor.ApplyFixed(prevBlock, data.AsSpan(i * 16, 16));
-                    var encrypted = EncryptEcb(xored, key, PaddingMode.None);
-                    Array.Copy(encrypted, 0, output, i * 16, 16);
-                    prevBlock = encrypted;
-                }
-
-                var padded = PKCS7.Pad(new ArraySegment<byte>(data, i * 16, data.Length % 16), 16);
-                Array.Copy(EncryptEcb(Xor.ApplyFixed(prevBlock, padded), key), 0, output, i * 16, 16);
-                return output;
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
-        }
-
-        public static byte[] Encrypt(ArraySegment<byte> data, byte[] dataSuffix, byte[] key)
-        {
-            var appended = new byte[data.Count + dataSuffix.Length];
+            var appended = new byte[data.Length + dataSuffix.Length];
             data.CopyTo(appended);
-            Array.Copy(dataSuffix, 0, appended, data.Count, dataSuffix.Length);
-            return Encrypt(appended, null, key, CipherMode.ECB);
+            dataSuffix.CopyTo(appended.AsSpan(data.Length));
+            return EncryptEcb(appended, key);
         }
 
-        public static byte[] Encrypt(byte[] dataPrefix, ArraySegment<byte> data, byte[] dataSuffix, byte[] key)
+        public static byte[] EncryptEcb(ReadOnlySpan<byte> dataPrefix, ReadOnlySpan<byte> data, ReadOnlySpan<byte> dataSuffix, byte[] key)
         {
-            var appended = new byte[dataPrefix.Length + data.Count + dataSuffix.Length];
-            Array.Copy(dataPrefix, 0, appended, 0, dataPrefix.Length);
-            data.CopyTo(appended, dataPrefix.Length);
-            Array.Copy(dataSuffix, 0, appended, dataPrefix.Length + data.Count, dataSuffix.Length);
-            return Encrypt(appended, null, key, CipherMode.ECB);
+            var appended = new byte[dataPrefix.Length + data.Length + dataSuffix.Length];
+            dataPrefix.CopyTo(appended);
+            data.CopyTo(appended.AsSpan(dataPrefix.Length));
+            dataSuffix.CopyTo(appended.AsSpan(dataPrefix.Length + data.Length));
+            return EncryptEcb(appended, key);
         }
 
-        public static byte[] Decrypt(byte[] cipher, byte[] key, CipherMode mode, byte[] iv = null, PaddingMode padding = PaddingMode.PKCS7)
+        public static byte[] EncryptEcb(ReadOnlySpan<byte> data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
+        {
+            return EncryptEcb(data.ToArray(), key);
+        }
+
+        public static byte[] EncryptEcb(byte[] data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
         {
             using (var aes = Aes.Create())
             {
-                aes.Key  = key;
-                aes.Mode = mode;
+                aes.Key     = key;
+                aes.Mode    = CipherMode.ECB;
+                aes.Padding = padding;
+
+                using (var encr = aes.CreateEncryptor())
+                {
+                    var text = encr.TransformFinalBlock(data, 0, data.Length);
+                    return text;
+                }
+            }
+        }
+
+        public static byte[] DecryptEcb(ReadOnlySpan<byte> cipher, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
+        {
+            return DecryptEcb(cipher.ToArray(), key, padding);
+        }
+
+        public static byte[] DecryptEcb(byte[] cipher, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
+        {
+            return LibraryDecrypt(cipher, null, key, CipherMode.ECB, padding);
+        }
+
+        public static byte[] EncryptCbcPkcs7(ReadOnlySpan<byte> data, ReadOnlySpan<byte> iv, byte[] key)
+        {
+            return CustomEncryptCbcPkcs7(data, iv, key);
+        }
+
+        public static byte[] EncryptCbcPkcs7(byte[] data, byte[] iv, byte[] key)
+        {
+            return CustomEncryptCbcPkcs7(data, iv, key);
+        }
+
+        private static byte[] CustomEncryptCbcPkcs7(ReadOnlySpan<byte> data, ReadOnlySpan<byte> iv, byte[] key)
+        {
+            var len       = data.Length  / 16 + 1;
+            var output    = new byte[len * 16];
+            var prevBlock = iv;
+            int i         = 0;
+            for (; i < len - 1; i++)
+            {
+                var xored     = Xor.ApplyFixed(prevBlock, data.Slice(i * 16, 16));
+                var encrypted = EncryptEcb(xored, key, PaddingMode.None);
+                Array.Copy(encrypted, 0, output, i * 16, 16);
+                prevBlock = encrypted;
+            }
+
+            var padded = PKCS7.Pad(data.Slice(i * 16, data.Length % 16), 16);
+            Array.Copy(EncryptEcb(Xor.ApplyFixed(prevBlock, padded), key), 0, output, i * 16, 16);
+            return output;
+        }
+
+        public static ReadOnlySpan<byte> DecryptCbcPkcs7(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, byte[] key)
+        {
+            return CustomDecryptCbcPkcs7(cipher, iv, key);
+            //return LibraryDecrypt(cipher.ToArray(), iv.ToArray(), key, CipherMode.CBC);
+        }
+
+        public static ReadOnlySpan<byte> DecryptCbcPkcs7(byte[] cipher, byte[] iv, byte[] key)
+        {
+            return CustomDecryptCbcPkcs7(cipher, iv, key);
+            //return LibraryDecrypt(cipher, iv, key, CipherMode.CBC);
+        }
+
+        public static ReadOnlySpan<byte> CustomDecryptCbcPkcs7(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, ReadOnlySpan<byte> key)
+        {
+            var blocks = cipher.Length / 16;
+            var output = new byte[cipher.Length];
+            for (int i = blocks - 1; i >= 0; --i)
+            {
+                ReadOnlySpan<byte> prevBlock;
+                if (i == 0)
+                    prevBlock = iv;
+                else
+                    prevBlock = cipher.Slice((i - 1) * 16, 16);
+
+                var decryptedBlock = DecryptEcb(cipher.Slice(i * 16, 16).ToArray(), key.ToArray(), PaddingMode.None);
+                var xored          = Xor.ApplyFixed(prevBlock, decryptedBlock);
+                Array.Copy(xored, 0, output, i * 16, 16);
+            }
+
+            return PKCS7.StripPad(output);
+        }
+
+        private static byte[] LibraryDecrypt(byte[] cipher, byte[] iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
+        {
+            using (var aes = Aes.Create())
+            {
+                aes.Key     = key;
+                aes.Mode    = mode;
                 aes.Padding = padding;
 
                 if (aes.Mode == CipherMode.CBC)
@@ -141,42 +203,6 @@ namespace MatasanoCryptoChallenge
                 using (var decr = aes.CreateDecryptor())
                 {
                     var text = decr.TransformFinalBlock(cipher, 0, cipher.Length);
-                    return text;
-                }
-            }
-        }
-
-        public static ReadOnlySpan<byte> DecryptCBCWithPadding(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, byte[] key)
-        {
-            var blocks = cipher.Length / 16;
-            var output = new byte[cipher.Length];
-            for (int i = blocks - 1; i >= 0; --i)
-            {
-                ReadOnlySpan<byte> prevBlock;
-                if (i == 0)
-                    prevBlock = iv;
-                else
-                    prevBlock = cipher.Slice((i - 1) * 16, 16);
-
-                var decryptedBlock = Decrypt(cipher.Slice(i * 16, 16).ToArray(), key, CipherMode.ECB, iv: null, PaddingMode.None);
-                var xored = Xor.ApplyFixed(prevBlock, decryptedBlock);
-                Array.Copy(xored, 0, output, i * 16, 16);
-            }
-
-            return PKCS7.StripPad(output);
-        }
-
-        private static byte[] EncryptEcb(byte[] data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
-        {
-            using (var aes = Aes.Create())
-            {
-                aes.Key  = key;
-                aes.Mode = CipherMode.ECB;
-                aes.Padding = padding;
-
-                using (var encr = aes.CreateEncryptor())
-                {
-                    var text = encr.TransformFinalBlock(data, 0, data.Length);
                     return text;
                 }
             }
@@ -262,7 +288,7 @@ namespace MatasanoCryptoChallenge
             return output;
         }
 
-        public static byte[] ApplyRepeating(byte[] bytesData, byte[] bytesKey)
+        public static byte[] ApplyRepeating(ReadOnlySpan<byte> bytesData, ReadOnlySpan<byte> bytesKey)
         {
             int k = 0;
             var output = new byte[bytesData.Length];
@@ -308,7 +334,7 @@ namespace MatasanoCryptoChallenge
             {' ', 0.1918182}
         };
 
-        public static (string plainText, byte key, double score) XorBestMatch(byte[] xoredBytes)
+        public static (string plainText, byte key, double score) XorBestMatch(ReadOnlySpan<byte> xoredBytes)
         {
             var candidate = (plainText: default(string), key: default(byte), score: 0.0);
             byte[] key = new byte[1];
@@ -391,7 +417,7 @@ namespace MatasanoCryptoChallenge
 
     public static class CbcPaddingOracle
     {
-        public static ReadOnlySpan<byte> Decrypt(byte[] encrypted, byte[] iv, byte[] key)
+        public static ReadOnlySpan<byte> Decrypt(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv, byte[] key)
         {
             if (encrypted.Length % 16 != 0)
                 throw new Exception();
@@ -401,11 +427,11 @@ namespace MatasanoCryptoChallenge
             var blocks = encrypted.Length / 16;
             for (int block = blocks - 1; block >= 0; --block)
             {
-                Span<byte> prevBlock;
+                Span<byte> prevBlock = new byte[16];
                 if (block == 0)
-                    prevBlock = iv;
+                    iv.CopyTo(prevBlock);
                 else
-                    prevBlock = encrypted.AsSpan((block - 1) * 16, 16);
+                    encrypted.Slice((block - 1) * 16, 16).CopyTo(prevBlock);
 
                 var blockCopy = new byte[16];
                 prevBlock.CopyTo(blockCopy);
@@ -427,7 +453,7 @@ namespace MatasanoCryptoChallenge
                             throw new Exception("byte wasn't found");
 
                         prevBlock[i] = (byte)b;
-                        if (Validate(encrypted.AsSpan(block * 16, 16), prevBlock, key))
+                        if (Validate(encrypted.Slice(block * 16, 16), prevBlock, key))
                         {
                             if (i != 0)
                             {
@@ -435,7 +461,7 @@ namespace MatasanoCryptoChallenge
                                 // But may accidentally find "0x02 0x02"
                                 // Let's modify i - 1 byte. If the first case the byte is not used for padding and doesn't affect validation
                                 prevBlock[i - 1] += 1;
-                                if (!Validate(encrypted.AsSpan(block * 16, 16), prevBlock, key))
+                                if (!Validate(encrypted.Slice(block * 16, 16), prevBlock, key))
                                     continue;
                             }
 
@@ -453,7 +479,7 @@ namespace MatasanoCryptoChallenge
         {
             try
             {
-                MyAes.DecryptCBCWithPadding(encrypted, iv, key);
+                MyAes.DecryptCbcPkcs7(encrypted, iv, key);
                 return true;
             }
             catch (CryptographicException e) when (e.Message == "Padding is invalid and cannot be removed.")
@@ -465,13 +491,13 @@ namespace MatasanoCryptoChallenge
 
     public static class AesOracle
     {
-        public static CipherMode GuessMode(byte[] encrypted, int blockSize)
+        public static CipherMode GuessMode(ReadOnlySpan<byte> encrypted, int blockSize)
         {
             for (int x = 0; x < encrypted.Length / blockSize; ++x)
             {
                 for (int y = x + 1; y < encrypted.Length / blockSize; ++y)
                 {
-                    if (AreBlocksEqual(encrypted.AsSpan(x * blockSize, blockSize), encrypted.AsSpan(y * blockSize, blockSize)))
+                    if (AreBlocksEqual(encrypted.Slice(x * blockSize, blockSize), encrypted.Slice(y * blockSize, blockSize)))
                     {
                         return CipherMode.ECB;
                     }
@@ -481,7 +507,7 @@ namespace MatasanoCryptoChallenge
             return CipherMode.CBC;
         }
 
-        public static int GuessBlockSize(Func<ArraySegment<byte>, byte[]> encrypt)
+        public static int GuessBlockSize(Func<ReadOnlyMemory<byte>, byte[]> encrypt)
         {
             var payload = new byte[100];
             int blockSize = 1;
@@ -489,7 +515,7 @@ namespace MatasanoCryptoChallenge
             int encryptedSize = 0;
             for (; blockSize < payload.Length; ++blockSize)
             {
-                var encrypted = encrypt(new ArraySegment<byte>(payload, 0, blockSize));
+                var encrypted = encrypt(new ReadOnlyMemory<byte>(payload, 0, blockSize));
                 if (encryptedSize != encrypted.Length)
                 {
                     ++changedSize;
@@ -505,7 +531,7 @@ namespace MatasanoCryptoChallenge
             throw new Exception();
         }
 
-        public static int GetPrefixLength(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt)
+        public static int GetPrefixLength(int blockSize, Func<ReadOnlyMemory<byte>, byte[]> encrypt)
         {
             var payload = new byte[blockSize + 1];
 
@@ -526,7 +552,7 @@ namespace MatasanoCryptoChallenge
             throw new Exception();
         }
 
-        private static int GetFirstDifferentBlock(byte[] array1, byte[] array2, int blockSize)
+        private static int GetFirstDifferentBlock(ReadOnlySpan<byte> array1, ReadOnlySpan<byte> array2, int blockSize)
         {
             if (array1.Length != array2.Length)
                 throw new Exception();
@@ -534,14 +560,14 @@ namespace MatasanoCryptoChallenge
             int blockNr;
             for (blockNr = 0; blockNr < array1.Length / blockSize; ++blockNr)
             {
-                if (!AreBlocksEqual(array1.AsSpan(blockNr * blockSize, blockSize), array2.AsSpan(blockNr * blockSize, blockSize)))
+                if (!AreBlocksEqual(array1.Slice(blockNr * blockSize, blockSize), array2.Slice(blockNr * blockSize, blockSize)))
                     return blockNr;
             }
-                
+
             throw new Exception();
         }
 
-        public static ReadOnlySpan<byte> ByteAtATimeEcb(int blockSize, Func<ArraySegment<byte>, byte[]> encrypt, int prefixLength = 0)
+        public static ReadOnlySpan<byte> ByteAtATimeEcb(int blockSize, Func<ReadOnlyMemory<byte>, byte[]> encrypt, int prefixLength = 0)
         {
             if (prefixLength < 0)
                 throw new Exception();
@@ -555,7 +581,7 @@ namespace MatasanoCryptoChallenge
 
             for (int j = 0; j < blockSize; ++j)
             {
-                cipherTexts[j] = encrypt(new ArraySegment<byte>(buffer, 0, prefixPaddingLength + blockSize - 1 - j));
+                cipherTexts[j] = encrypt(new ReadOnlyMemory<byte>(buffer, 0, prefixPaddingLength + blockSize - 1 - j));
             }
 
             int i;
@@ -566,7 +592,7 @@ namespace MatasanoCryptoChallenge
                 {
                     buffer[prefixPaddingLength + blockSize - 1 + i] = (byte)guessedByte;
                     if (AreBlocksEqual(cipherTexts[i % blockSize].AsSpan(prefixLength + prefixPaddingLength + i / blockSize * blockSize, blockSize),
-                                       encrypt(new ArraySegment<byte>(buffer, i, prefixPaddingLength + blockSize)).AsSpan(prefixLength + prefixPaddingLength, blockSize)))
+                                       encrypt(new ReadOnlyMemory<byte>(buffer, i, prefixPaddingLength + blockSize)).AsSpan(prefixLength + prefixPaddingLength, blockSize)))
                     {
                         break;
                     }
@@ -596,7 +622,7 @@ namespace MatasanoCryptoChallenge
 
     public static class RandomEncryptor
     {
-        public static (byte[] cipher, CipherMode mode) Encrypt(byte[] plainText)
+        public static (byte[] cipher, CipherMode mode) Encrypt(ReadOnlySpan<byte> plainText)
         {
             using (var rnd = RandomNumberGenerator.Create())
             {
@@ -611,16 +637,16 @@ namespace MatasanoCryptoChallenge
 
                 var appended = new byte[before.Length + plainText.Length + after.Length];
                 Array.Copy(before, appended, before.Length);
-                Array.Copy(plainText, 0, appended, before.Length, plainText.Length);
+                plainText.CopyTo(appended.AsSpan(before.Length));
                 Array.Copy(after, 0, appended, before.Length + plainText.Length, after.Length);
 
                 var m = rnd.GetInt(0, 1);
                 var mode = m % 2 == 0 ? CipherMode.CBC : CipherMode.ECB;
-                return (MyAes.Encrypt(appended, IV, key, mode), mode);
+                return (mode == CipherMode.CBC ? MyAes.EncryptCbcPkcs7(appended, IV, key) : MyAes.EncryptEcb(appended, key), mode);
             }
         }
 
-        private static byte[] IV = new byte[16];
+        private static readonly byte[] IV = new byte[16];
     }
 
     public static class HttpQuery
@@ -657,7 +683,7 @@ namespace MatasanoCryptoChallenge
 
     public class UserProfileOracle
     {
-        private byte[] Key;
+        private readonly byte[] Key;
 
         public UserProfileOracle()
         {
@@ -680,12 +706,12 @@ namespace MatasanoCryptoChallenge
                 ("role", "user")
             };
 
-            return MyAes.Encrypt(Encoding.UTF8.GetBytes(HttpQuery.Compile(obj)), null, Key, CipherMode.ECB);
+            return MyAes.EncryptEcb(Encoding.UTF8.GetBytes(HttpQuery.Compile(obj)), Key);
         }
 
-        public List<(string key, string value)> Decrypt(byte[] cipher)
+        public List<(string key, string value)> Decrypt(ReadOnlySpan<byte> cipher)
         {
-            var plainText = Encoding.UTF8.GetString(MyAes.Decrypt(cipher, Key, CipherMode.ECB));
+            var plainText = Encoding.UTF8.GetString(MyAes.DecryptEcb(cipher, Key));
             return HttpQuery.Parse(plainText);
         }
     }

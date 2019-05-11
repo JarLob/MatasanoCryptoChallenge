@@ -25,7 +25,7 @@ namespace Tests
             byte[] key = Encoding.UTF8.GetBytes("ss012345678901234567890123456789");
             byte[] iv = new byte[16];
 
-            cipher = MyAes.Encrypt(data, iv, key, CipherMode.CBC);
+            cipher = MyAes.EncryptCbcPkcs7(data, iv, key);
 
             using (var aes2 = new AesCryptoServiceProvider())
             {
@@ -76,7 +76,7 @@ namespace Tests
                 var key = new byte[16];
                 rnd.GetBytes(key);
 
-                Func<ArraySegment<byte>, byte[]> encrypt = data => MyAes.Encrypt(data, secretSuffix, key);
+                Func<ReadOnlyMemory<byte>, byte[]> encrypt = data => MyAes.EncryptEcb(data.Span, secretSuffix, key);
 
                 var blockSize = AesOracle.GuessBlockSize(encrypt);
                 Assert.Equal(16, blockSize);
@@ -138,7 +138,7 @@ namespace Tests
                 var prefix = new byte[prefixLength];
                 rnd.GetBytes(prefix);
 
-                Func<ArraySegment<byte>, byte[]> encrypt = data => MyAes.Encrypt(prefix, data, secretSuffix, key);
+                Func<ReadOnlyMemory<byte>, byte[]> encrypt = data => MyAes.EncryptEcb(prefix, data.Span, secretSuffix, key);
 
                 var blockSize = AesOracle.GuessBlockSize(encrypt);
                 Assert.Equal(16, blockSize);
@@ -183,25 +183,25 @@ namespace Tests
                 var iv = new byte[16];
                 rnd.GetBytes(iv);
 
-                var encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), iv, key, CipherMode.CBC);
+                var encrypted = MyAes.EncryptCbcPkcs7(Encoding.UTF8.GetBytes(input), iv, key);
                 var target = ";admin=true;a=";
                 for (int i = 0; i < target.Length; ++i)
                 {
                     encrypted[2 * 16 + i] ^= (byte)(target[i] ^ input[3 * 16 + i]);
                 }
 
-                var decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC, iv));
+                var decrypted = Encoding.UTF8.GetString(MyAes.DecryptCbcPkcs7(encrypted, iv, key));
                 var values = HttpQuery.Parse(decrypted, ';', '=');
                 var admin = values.FirstOrDefault(x => x.key == "admin");
                 Assert.Equal("true", admin.value);
 
                 userdata = $"0123456789012345\0admin\0true";
                 input = $"{prefix}{userdata}{suffix}";
-                encrypted = MyAes.Encrypt(Encoding.UTF8.GetBytes(input), iv, key, CipherMode.CBC);
+                encrypted = MyAes.EncryptCbcPkcs7(Encoding.UTF8.GetBytes(input), iv, key);
                 encrypted[2 * 16 + 0] ^= (byte)(';' ^ input[3 * 16 + 0]);
                 encrypted[2 * 16 + 6] ^= (byte)('=' ^ input[3 * 16 + 6]);
 
-                decrypted = Encoding.UTF8.GetString(MyAes.Decrypt(encrypted, key, CipherMode.CBC, iv));
+                decrypted = Encoding.UTF8.GetString(MyAes.DecryptCbcPkcs7(encrypted, iv, key));
                 values = HttpQuery.Parse(decrypted, ';', '=');
                 admin = values.FirstOrDefault(x => x.key == "admin");
                 Assert.Equal("true", admin.value);

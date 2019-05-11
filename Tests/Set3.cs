@@ -15,20 +15,22 @@ namespace Tests
 
             using (var rnd = RandomNumberGenerator.Create())
             {
-                var input = Convert.FromBase64String(lines[rnd.GetInt(0, lines.Length)]);
+                //var input = Convert.FromBase64String(lines[rnd.GetInt(0, lines.Length)]);
 
-                var key = new byte[16];
-                rnd.GetBytes(key);
+                foreach (var line in lines)
+                {
+                    var input = Convert.FromBase64String(line);
 
-                var iv = new byte[16];
-                rnd.GetBytes(iv);
+                    var key = new byte[16];
+                    rnd.GetBytes(key);
 
-                var encrypted = MyAes.Encrypt(input, iv, key, CipherMode.CBC);
-                var decrypted = MyAes.DecryptCBCWithPadding(encrypted, iv, key);
-                Assert.Equal(input, decrypted.ToArray());
+                    var iv = new byte[16];
+                    rnd.GetBytes(iv);
 
-                decrypted = CbcPaddingOracle.Decrypt(encrypted, iv, key);
-                Assert.Equal(input, decrypted.ToArray());
+                    var encrypted = MyAes.EncryptCbcPkcs7(input, iv, key);
+                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, iv, key);
+                    Assert.Equal(input, decrypted.ToArray());
+                }
             }
         }
     }
