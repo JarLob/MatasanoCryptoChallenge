@@ -9,6 +9,46 @@ namespace Tests
     public class Set3
     {
         [Fact]
+        public void CbcCustomEncryptLibraryDecrypt()
+        {
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var input = new byte[42];
+                rnd.GetBytes(input);
+
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                var iv = new byte[16];
+                rnd.GetBytes(iv);
+
+                var encrypted = MyAes._CustomEncryptCbcPkcs7(input, iv, key);
+                var decrypted = MyAes._LibraryDecrypt(encrypted, iv, key, CipherMode.CBC);
+                Assert.Equal(input, decrypted);
+            }
+        }
+
+        [Fact]
+        public void CbcLibraryEncryptCustomDecrypt()
+        {
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var input = new byte[42];
+                rnd.GetBytes(input);
+
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                var iv = new byte[16];
+                rnd.GetBytes(iv);
+
+                var encrypted = MyAes._LibraryEncrypt(input, iv, key, CipherMode.CBC);
+                var decrypted = MyAes._CustomDecryptCbcPkcs7(encrypted, iv, key);
+                Assert.Equal(input, decrypted.ToArray());
+            }
+        }
+
+        [Fact]
         public void Challenge17_CBC_padding_oracle()
         {
             var lines = File.ReadAllLines("17.txt");

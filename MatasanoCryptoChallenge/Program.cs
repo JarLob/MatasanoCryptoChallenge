@@ -94,16 +94,29 @@ namespace MatasanoCryptoChallenge
 
         public static byte[] EncryptEcb(ReadOnlySpan<byte> data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
         {
-            return EncryptEcb(data.ToArray(), key);
+            return EncryptEcb(data.ToArray(), key, padding);
         }
 
         public static byte[] EncryptEcb(byte[] data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
         {
+            return _LibraryEncrypt(data, null, key, CipherMode.ECB, padding);
+        }
+
+        public static byte[] _LibraryEncrypt(byte[] data, byte[] iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
+        {
             using (var aes = Aes.Create())
             {
                 aes.Key     = key;
-                aes.Mode    = CipherMode.ECB;
+                aes.Mode    = mode;
                 aes.Padding = padding;
+
+                if (aes.Mode == CipherMode.CBC)
+                {
+                    if (iv == default)
+                        throw new Exception();
+
+                    aes.IV = iv;
+                }
 
                 using (var encr = aes.CreateEncryptor())
                 {
@@ -120,20 +133,20 @@ namespace MatasanoCryptoChallenge
 
         public static byte[] DecryptEcb(byte[] cipher, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
         {
-            return LibraryDecrypt(cipher, null, key, CipherMode.ECB, padding);
+            return _LibraryDecrypt(cipher, null, key, CipherMode.ECB, padding);
         }
 
         public static byte[] EncryptCbcPkcs7(ReadOnlySpan<byte> data, ReadOnlySpan<byte> iv, byte[] key)
         {
-            return CustomEncryptCbcPkcs7(data, iv, key);
+            return _CustomEncryptCbcPkcs7(data, iv, key);
         }
 
         public static byte[] EncryptCbcPkcs7(byte[] data, byte[] iv, byte[] key)
         {
-            return CustomEncryptCbcPkcs7(data, iv, key);
+            return _CustomEncryptCbcPkcs7(data, iv, key);
         }
 
-        private static byte[] CustomEncryptCbcPkcs7(ReadOnlySpan<byte> data, ReadOnlySpan<byte> iv, byte[] key)
+        public static byte[] _CustomEncryptCbcPkcs7(ReadOnlySpan<byte> data, ReadOnlySpan<byte> iv, byte[] key)
         {
             var len       = data.Length  / 16 + 1;
             var output    = new byte[len * 16];
@@ -154,17 +167,17 @@ namespace MatasanoCryptoChallenge
 
         public static ReadOnlySpan<byte> DecryptCbcPkcs7(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, byte[] key)
         {
-            return CustomDecryptCbcPkcs7(cipher, iv, key);
-            //return LibraryDecrypt(cipher.ToArray(), iv.ToArray(), key, CipherMode.CBC);
+            return _CustomDecryptCbcPkcs7(cipher, iv, key);
+            //return _LibraryDecrypt(cipher.ToArray(), iv.ToArray(), key, CipherMode.CBC);
         }
 
         public static ReadOnlySpan<byte> DecryptCbcPkcs7(byte[] cipher, byte[] iv, byte[] key)
         {
-            return CustomDecryptCbcPkcs7(cipher, iv, key);
-            //return LibraryDecrypt(cipher, iv, key, CipherMode.CBC);
+            return _CustomDecryptCbcPkcs7(cipher, iv, key);
+            //return _LibraryDecrypt(cipher, iv, key, CipherMode.CBC);
         }
 
-        public static ReadOnlySpan<byte> CustomDecryptCbcPkcs7(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, ReadOnlySpan<byte> key)
+        public static ReadOnlySpan<byte> _CustomDecryptCbcPkcs7(ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> iv, byte[] key)
         {
             var blocks = cipher.Length / 16;
             var output = new byte[cipher.Length];
@@ -176,7 +189,7 @@ namespace MatasanoCryptoChallenge
                 else
                     prevBlock = cipher.Slice((i - 1) * 16, 16);
 
-                var decryptedBlock = DecryptEcb(cipher.Slice(i * 16, 16).ToArray(), key.ToArray(), PaddingMode.None);
+                var decryptedBlock = DecryptEcb(cipher.Slice(i * 16, 16), key, PaddingMode.None);
                 var xored          = Xor.ApplyFixed(prevBlock, decryptedBlock);
                 Array.Copy(xored, 0, output, i * 16, 16);
             }
@@ -184,7 +197,7 @@ namespace MatasanoCryptoChallenge
             return PKCS7.StripPad(output);
         }
 
-        private static byte[] LibraryDecrypt(byte[] cipher, byte[] iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
+        public static byte[] _LibraryDecrypt(byte[] cipher, byte[] iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
         {
             using (var aes = Aes.Create())
             {
