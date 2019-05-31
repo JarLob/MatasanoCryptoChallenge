@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Security.Cryptography;
+using System.Text;
 using MatasanoCryptoChallenge;
 using Xunit;
 
@@ -72,6 +73,21 @@ namespace Tests
                     Assert.Equal(input, decrypted.ToArray());
                 }
             }
+        }
+
+        [Fact]
+        public void Challenge18_CTR_stream_cipher_mode()
+        {
+            var input = Convert.FromBase64String("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==");
+            UInt64 nonce = 0;
+            var key = Encoding.UTF8.GetBytes("YELLOW SUBMARINE");
+
+            Assert.Equal("Yo, VIP Let's kick it Ice, Ice, baby Ice, Ice, baby ", Encoding.UTF8.GetString(MyAes.EncryptDecryptCtr(input, nonce, key)));
+
+            nonce = 13;
+            var plainText = "test";
+            var encrypted = MyAes.EncryptDecryptCtr(Encoding.UTF8.GetBytes(plainText), nonce, key);
+            Assert.Equal(plainText, Encoding.UTF8.GetString(MyAes.EncryptDecryptCtr(encrypted, nonce, key)));
         }
     }
 }

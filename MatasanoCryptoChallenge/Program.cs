@@ -75,6 +75,36 @@ namespace MatasanoCryptoChallenge
 
     public static class MyAes
     {
+        public static byte[] EncryptDecryptCtr(ReadOnlySpan<byte> data, ulong nonce, byte[] key)
+        {
+            var nonceBytes = BitConverter.GetBytes(nonce);
+            if (!BitConverter.IsLittleEndian)
+                Array.Reverse(nonceBytes);
+
+            var blocks = data.Length / 16 + (data.Length % 16 > 0 ? 1 : 0);
+            var output = new byte[data.Length];
+            var nonceAndCounter = new byte[16];
+            nonceBytes.CopyTo(nonceAndCounter, 0);
+
+            for (int i = 0; i < blocks; ++i)
+            {
+                var counterBytes = BitConverter.GetBytes((ulong)i);
+                if (!BitConverter.IsLittleEndian)
+                    Array.Reverse(counterBytes);
+
+                counterBytes.CopyTo(nonceAndCounter, 8);
+                var decryptedBlock = EncryptEcb(nonceAndCounter, key, PaddingMode.None);
+
+                var oMax = Math.Min(i * 16 + 16, data.Length);
+                for (int o = i * 16, d = 0; o < oMax; ++o, ++d)
+                {
+                    output[o] = (byte)(decryptedBlock[d] ^ data[o]);
+                }
+            }
+
+            return output;
+        }
+
         public static byte[] EncryptEcb(ReadOnlySpan<byte> data, ReadOnlySpan<byte> dataSuffix, byte[] key)
         {
             var appended = new byte[data.Length + dataSuffix.Length];
