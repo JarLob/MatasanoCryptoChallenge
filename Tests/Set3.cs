@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -79,7 +80,7 @@ namespace Tests
         public void Challenge18_CTR_stream_cipher_mode()
         {
             var input = Convert.FromBase64String("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==");
-            UInt64 nonce = 0;
+            ulong nonce = 0;
             var key = Encoding.UTF8.GetBytes("YELLOW SUBMARINE");
 
             Assert.Equal("Yo, VIP Let's kick it Ice, Ice, baby Ice, Ice, baby ", Encoding.UTF8.GetString(MyAes.EncryptDecryptCtr(input, nonce, key)));
@@ -88,6 +89,45 @@ namespace Tests
             var plainText = "test";
             var encrypted = MyAes.EncryptDecryptCtr(Encoding.UTF8.GetBytes(plainText), nonce, key);
             Assert.Equal(plainText, Encoding.UTF8.GetString(MyAes.EncryptDecryptCtr(encrypted, nonce, key)));
+        }
+
+        [Fact]
+        public void Challenge19_Fixed_Nonce_CTR_Substitutions()
+        {
+            ulong nonce = 0;
+
+            var lines = File.ReadAllLines("19.txt");
+            var encryptedLines = new List<byte[]>(lines.Length);
+            var plainTextLines = new List<string>(lines.Length);
+
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                foreach (var line in lines)
+                {
+                    var plainBytes = Convert.FromBase64String(line);
+                    var plainText = Encoding.UTF8.GetString(plainBytes);
+                    plainTextLines.Add(plainText);
+                    var encrypted = MyAes.EncryptDecryptCtr(plainBytes, nonce, key);
+                    encryptedLines.Add(encrypted);
+                }
+            }
+
+            var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? ";
+            var keystream = Xor.GetCommonKeyStream(encryptedLines, expectedChars);
+
+            for (int j = 0; j < encryptedLines.Count; j++)
+            {
+                byte[] encryptedLine = (byte[])encryptedLines[j];
+                var line = new char[encryptedLine.Length];
+                for (int i = 0; i < encryptedLine.Length; ++i)
+                    line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
+
+                var plainText = new string(line);
+                Assert.Equal(plainTextLines[j], plainText);
+            }
         }
     }
 }

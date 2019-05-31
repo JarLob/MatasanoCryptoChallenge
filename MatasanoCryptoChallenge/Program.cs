@@ -374,7 +374,33 @@ namespace MatasanoCryptoChallenge
             {'x', 0.0013692},
             {'y', 0.0145984},
             {'z', 0.0007836},
-            {' ', 0.1918182}
+            {' ', 0.1918182},
+            {'A', 0.0651738},
+            {'B', 0.0124248},
+            {'C', 0.0217339},
+            {'D', 0.0349835},
+            {'E', 0.1041442},
+            {'F', 0.0197881},
+            {'G', 0.0158610},
+            {'H', 0.0492888},
+            {'I', 0.0558094},
+            {'J', 0.0009033},
+            {'K', 0.0050529},
+            {'L', 0.0331490},
+            {'M', 0.0202124},
+            {'N', 0.0564513},
+            {'O', 0.0596302},
+            {'P', 0.0137645},
+            {'Q', 0.0008606},
+            {'R', 0.0497563},
+            {'S', 0.0515760},
+            {'T', 0.0729357},
+            {'U', 0.0225134},
+            {'V', 0.0082903},
+            {'W', 0.0171272},
+            {'X', 0.0013692},
+            {'Y', 0.0145984},
+            {'Z', 0.0007836},
         };
 
         public static (string plainText, byte key, double score) XorBestMatch(ReadOnlySpan<byte> xoredBytes)
@@ -385,10 +411,9 @@ namespace MatasanoCryptoChallenge
             {
                 key[0] = (byte)i;
                 var plainText = Encoding.UTF8.GetString(Xor.ApplyRepeating(xoredBytes, key));
-                var lowerCaseText = plainText.ToLowerInvariant();
 
                 double score = 0.0;
-                foreach (var c in lowerCaseText)
+                foreach (var c in plainText)
                 {
                     if (EnglishFreq.TryGetValue(c, out var sc))
                         score += sc;
@@ -403,6 +428,47 @@ namespace MatasanoCryptoChallenge
             }
 
             return candidate;
+        }
+
+        public static byte[] GetCommonKeyStream(List<byte[]> encryptedLines, string expectedChars)
+        {
+            var candidates = new List<byte>();
+            var keySteam = new byte[encryptedLines.Max(x => x.Length)];
+
+            int i = 0;
+            while (true)
+            {
+                if (encryptedLines.TrueForAll(x => x.Length <= i))
+                    break;
+
+                for (int b = 0; b < 256; ++b)
+                {
+                    if (encryptedLines.TrueForAll(x =>
+                    {
+                        if (x.Length <= i)
+                            return false;
+
+                        return expectedChars.Contains(Convert.ToChar((byte)(x[i] ^ b)));
+                    }))
+                    {
+                        candidates.Add((byte)b);
+                    }
+                }
+
+                if (candidates.Count != 1)
+                {
+                    keySteam[i] = Xor.XorBestMatch(encryptedLines.Where(x => x.Length > i).Select(x => x[i]).ToArray().AsSpan()).key;
+                }
+                else
+                {
+                    keySteam[i] = candidates[0];
+                }
+
+                candidates.Clear();
+                ++i;
+            }
+
+            return keySteam;
         }
     }
 
