@@ -29,21 +29,27 @@ namespace Tests
         [Fact]
         public void Challenge03_SingleByteBreakXOR()
         {
-            Assert.Equal("Cooking MC's like a pound of bacon",
-                         Xor.XorBestMatch(Hex.ToBytes("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")).plainText);
+            var bytes = Hex.ToBytes("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
+            var bestMatch = Xor.XorBestMatch(bytes).First();
+            var plainText = Encoding.UTF8.GetString(Xor.ApplyRepeating(bytes, new [] {bestMatch.key}));
+
+            Assert.Equal("Cooking MC's like a pound of bacon", plainText);
         }
 
         [Fact]
         public void Challenge04_FindXORInFile()
         {
             var lines      = File.ReadAllLines("4.txt");
-            var candidates = new List<(string plainText, byte key, double score)>(lines.Length);
+            var candidates = new List<(string line, byte key, double score)>(lines.Length);
             foreach (var line in lines)
             {
-                candidates.Add(Xor.XorBestMatch(Hex.ToBytes(line)));
+                var c = Xor.XorBestMatch(Hex.ToBytes(line)).First();
+                candidates.Add((line, c.key, c.score));
             }
 
-            Assert.Equal("Now that the party is jumping\n", candidates.OrderByDescending(x => x.score).First().plainText);
+            var candidate = candidates.OrderByDescending(x => x.score).First();
+            var plainText = Encoding.UTF8.GetString(Xor.ApplyRepeating(Hex.ToBytes(candidate.line), new [] { candidate.key }));
+            Assert.Equal("Now that the party is jumping\n", plainText);
         }
 
         [Fact]
@@ -83,7 +89,7 @@ namespace Tests
             for (int k = 0; k < len; ++k)
             {
                 var block = cipher.Where((x, i) => i % len == k).ToArray();
-                key[k] = Xor.XorBestMatch(block).key;
+                key[k] = Xor.XorBestMatch(block).First().key;
             }
 
             Assert.Equal("Terminator X: Bring the noise", Encoding.UTF8.GetString(key));

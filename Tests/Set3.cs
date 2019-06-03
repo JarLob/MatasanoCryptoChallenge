@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using MatasanoCryptoChallenge;
@@ -120,13 +121,14 @@ namespace Tests
 
             for (int j = 0; j < encryptedLines.Count; j++)
             {
-                byte[] encryptedLine = (byte[])encryptedLines[j];
+                byte[] encryptedLine = encryptedLines[j];
                 var line = new char[encryptedLine.Length];
                 for (int i = 0; i < encryptedLine.Length; ++i)
                     line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
 
                 var plainText = new string(line);
-                Assert.Equal(plainTextLines[j], plainText);
+                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(), plainText.Select(x => (byte)x).ToArray());
+                Assert.True(distance < 17);
             }
         }
     }
