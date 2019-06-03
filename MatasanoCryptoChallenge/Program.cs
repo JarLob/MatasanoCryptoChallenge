@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -345,63 +346,109 @@ namespace MatasanoCryptoChallenge
             return output;
         }
 
-        private static readonly Dictionary<char, double> EnglishFreq = new Dictionary<char, double>()
+        private static readonly Lazy<Dictionary<char, Dictionary<char, double>>> EnglishFreq2 = new Lazy<Dictionary<char, Dictionary<char, double>>>(() =>
         {
-            // From http://www.data-compression.com/english.html
-            {'a', 0.0651738},
-            {'b', 0.0124248},
-            {'c', 0.0217339},
-            {'d', 0.0349835},
-            {'e', 0.1041442},
-            {'f', 0.0197881},
-            {'g', 0.0158610},
-            {'h', 0.0492888},
-            {'i', 0.0558094},
-            {'j', 0.0009033},
-            {'k', 0.0050529},
-            {'l', 0.0331490},
-            {'m', 0.0202124},
-            {'n', 0.0564513},
-            {'o', 0.0596302},
-            {'p', 0.0137645},
-            {'q', 0.0008606},
-            {'r', 0.0497563},
-            {'s', 0.0515760},
-            {'t', 0.0729357},
-            {'u', 0.0225134},
-            {'v', 0.0082903},
-            {'w', 0.0171272},
-            {'x', 0.0013692},
-            {'y', 0.0145984},
-            {'z', 0.0007836},
-            {' ', 0.1918182},
-            {'A', 0.0651738},
-            {'B', 0.0124248},
-            {'C', 0.0217339},
-            {'D', 0.0349835},
-            {'E', 0.1041442},
-            {'F', 0.0197881},
-            {'G', 0.0158610},
-            {'H', 0.0492888},
-            {'I', 0.0558094},
-            {'J', 0.0009033},
-            {'K', 0.0050529},
-            {'L', 0.0331490},
-            {'M', 0.0202124},
-            {'N', 0.0564513},
-            {'O', 0.0596302},
-            {'P', 0.0137645},
-            {'Q', 0.0008606},
-            {'R', 0.0497563},
-            {'S', 0.0515760},
-            {'T', 0.0729357},
-            {'U', 0.0225134},
-            {'V', 0.0082903},
-            {'W', 0.0171272},
-            {'X', 0.0013692},
-            {'Y', 0.0145984},
-            {'Z', 0.0007836},
-        };
+            var lines = File.ReadAllLines("SecondOrderStatistics.txt");
+
+            var row = lines[1].Split("||");
+            if (row.Length != 2)
+                throw new Exception();
+
+            var letters = row.Last()
+                             .Split('|')
+                             .SkipLast(1)
+                             .Select(x =>
+                             {
+                                 var trimmed = x.Trim();
+                                 if (trimmed == "SPACE")
+                                     return ' ';
+
+                                 if (trimmed.Length != 1)
+                                     throw new Exception();
+
+                                 return trimmed[0];
+                             })
+                             .ToArray();
+
+            var dict = new Dictionary<char, Dictionary<char, double>>(letters.Length * 2);
+
+            foreach (var row2 in lines.Skip(3).SkipLast(1))
+            {
+                var letterToFreq = row2.Split("||");
+                if (letterToFreq.Length != 2)
+                    throw new Exception();
+
+                var letterString = letterToFreq[0].Trim();
+
+                if (letterString != "SPACE" && letterString.Length != 1)
+                    throw new Exception();
+
+                var letterChar = letterString == "SPACE" ? ' ' : letterString[0];
+
+                var frequencies = letterToFreq[1].Split(' ')
+                                                 .SkipLast(1)
+                                                 .Select(double.Parse)
+                                                 .ToArray();
+                var freqMap = new Dictionary<char, double>(letters.Length * 2);
+
+                for (int i = 0; i < letters.Length; ++i)
+                {
+                    freqMap.Add(letters[i], frequencies[i]);
+                    var upper = char.ToUpperInvariant(letters[i]);
+                    if (upper != letters[i])
+                        freqMap.Add(upper, frequencies[i]);
+                }
+
+                dict.Add(letterChar, freqMap);
+                var upper2 = char.ToUpperInvariant(letterChar);
+                if (upper2 != letterChar)
+                    dict.Add(upper2, freqMap);
+            }
+
+            return dict;
+        });
+
+        // From http://www.data-compression.com/english.html
+        private static readonly Lazy<Dictionary<char, double>> EnglishFreq = new Lazy<Dictionary<char, double>>(() =>
+        {
+            var lines = File.ReadAllLines("FirstOrderStatistics.txt");
+
+            var letters = lines[1].Split('|')
+                                  .Skip(1)
+                                  .SkipLast(1)
+                                  .Select(x =>
+                                  {
+                                     var trimmed = x.Trim();
+                                     if (trimmed == "SPACE")
+                                         return ' ';
+
+                                     if (trimmed.Length != 1)
+                                         throw new Exception();
+
+                                     return trimmed[0];
+                                  })
+                                  .ToArray();
+
+            if (lines.Length != 4)
+                throw new Exception();
+
+            var frequencies = lines[3].Split(' ')
+                                      .Skip(1)
+                                      .SkipLast(1)
+                                      .Select(double.Parse)
+                                      .ToArray();
+            var freqMap = new Dictionary<char, double>(letters.Length * 2);
+
+            for (int i = 0; i < letters.Length; ++i)
+            {
+                freqMap.Add(letters[i], frequencies[i]);
+                var upper = char.ToUpperInvariant(letters[i]);
+                if (upper != letters[i])
+                    freqMap.Add(upper, frequencies[i]);
+            }
+
+            return freqMap;
+        });
 
         public static (string plainText, byte key, double score) XorBestMatch(ReadOnlySpan<byte> xoredBytes)
         {
@@ -415,7 +462,7 @@ namespace MatasanoCryptoChallenge
                 double score = 0.0;
                 foreach (var c in plainText)
                 {
-                    if (EnglishFreq.TryGetValue(c, out var sc))
+                    if (EnglishFreq.Value.TryGetValue(c, out var sc))
                         score += sc;
                 }
 
