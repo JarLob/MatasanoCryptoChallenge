@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using MatasanoCryptoChallenge;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Tests
 {
@@ -92,12 +93,9 @@ namespace Tests
             Assert.Equal(plainText, Encoding.UTF8.GetString(MyAes.EncryptDecryptCtr(encrypted, nonce, key)));
         }
 
-        [Fact]
-        public void Challenge19_Fixed_Nonce_CTR_Substitutions()
+        private (List<byte[]> encryptedLines, List<string> plainTextLines) ReadAndEncryptWithCTR(string fileName, ulong nonce)
         {
-            ulong nonce = 0;
-
-            var lines = File.ReadAllLines("19.txt");
+            var lines = File.ReadAllLines(fileName);
             var encryptedLines = new List<byte[]>(lines.Length);
             var plainTextLines = new List<string>(lines.Length);
 
@@ -116,8 +114,26 @@ namespace Tests
                 }
             }
 
+            return (encryptedLines, plainTextLines);
+        }
+
+        private readonly ITestOutputHelper output;
+
+        public Set3(ITestOutputHelper output)
+        {
+            this.output = output;
+        }
+
+        [Fact]
+        public void Challenge19_Fixed_Nonce_CTR_Substitutions()
+        {
+            var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("19.txt", 0);
+
             var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? ";
             var keystream = Xor.GetCommonKeyStream(encryptedLines, expectedChars);
+
+            var maxDistance = 0.0;
+            const double tolerableDistance = 18.0;
 
             for (int j = 0; j < encryptedLines.Count; j++)
             {
@@ -128,8 +144,43 @@ namespace Tests
 
                 var plainText = new string(line);
                 var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(), plainText.Select(x => (byte)x).ToArray());
-                Assert.True(distance < 17);
+                maxDistance = Math.Max(distance, maxDistance);
+
+                if ((distance - tolerableDistance) > 0.00001)
+                {
+                    output.WriteLine($"{maxDistance}");
+                    output.WriteLine(plainText);
+                }
             }
+
+            Assert.True(tolerableDistance >= maxDistance);
+        }
+
+        [Fact]
+        public void Challenge20_Fixed_Nonce_CTR_Statistically()
+        {
+            var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("20.txt", 0);
+
+            var minLength = encryptedLines.Min(x => x.Length);
+            var cipher = encryptedLines.Select(x => x.Take(minLength)).SelectMany(x => x).ToArray();
+            var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? /";
+
+            var keystream = Xor.BreakRepeating(cipher, minLength, expectedChars);
+
+            var maxDistance = 0.0;
+            for (int j = 0; j < encryptedLines.Count; j++)
+            {
+                byte[] encryptedLine = encryptedLines[j];
+                var line = new char[minLength];
+                for (int i = 0; i < minLength; ++i)
+                    line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
+
+                var plainText = new string(line);
+                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Take(minLength).Select(x => (byte)x).ToArray(), plainText.Select(x => (byte)x).ToArray());
+                maxDistance = Math.Max(distance, maxDistance);
+            }
+
+            Assert.Equal(6.0, maxDistance);
         }
     }
 }

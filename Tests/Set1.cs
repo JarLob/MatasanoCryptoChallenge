@@ -68,29 +68,8 @@ namespace Tests
             var base64 = File.ReadAllText("6.txt").Replace("\n", "");
             var cipher = Convert.FromBase64String(base64);
 
-            var candidates = new Dictionary<int, double>(40);
-            for (int i = 2; i < 41; ++i)
-            {
-                if (cipher.Length / i < 2)
-                    break;
-
-                var distances = new double[cipher.Length / i - 1];
-                for (int segment = 0; segment < distances.Length; ++segment)
-                {
-                    distances[segment] = Hamming.GetDistance(cipher.AsSpan(segment * i, i), cipher.AsSpan((segment + 1) * i, i)) / (double)i;
-                }
-
-                candidates[i] = distances.Average();
-            }
-
-            var len = candidates.OrderByDescending(x => x.Value).Last().Key;
-            var key = new byte[len];
-
-            for (int k = 0; k < len; ++k)
-            {
-                var block = cipher.Where((x, i) => i % len == k).ToArray();
-                key[k] = Xor.XorBestMatch(block).First().key;
-            }
+            var len = Xor.GuessRepeatingKeyLength(cipher, 40);
+            var key = Xor.BreakRepeating(cipher, len);
 
             Assert.Equal("Terminator X: Bring the noise", Encoding.UTF8.GetString(key));
 

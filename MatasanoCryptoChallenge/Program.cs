@@ -395,17 +395,18 @@ namespace MatasanoCryptoChallenge
                 for (int i = 0; i < letters.Length; ++i)
                 {
                     freqMap.Add(letters[i], frequencies[i]);
-                    //var upper = char.ToUpperInvariant(letters[i]);
-                    //if (upper != letters[i])
-                    //    freqMap.Add(upper, frequencies[i]);
+                    var upper = char.ToUpperInvariant(letters[i]);
+                    if (upper != letters[i])
+                        freqMap.Add(upper, frequencies[i]);
                 }
 
                 dict.Add((letterChar1, letterChar2), freqMap);
-                //var upper2 = char.ToUpperInvariant(letterChar);
-                //if (upper2 == letterChar)
-                //    continue;
+                var letterChar1Upper = char.ToUpperInvariant(letterChar1);
+                var letterChar2Upper = char.ToUpperInvariant(letterChar2);
+                if (letterChar1Upper == letterChar1 && letterChar2Upper == letterChar2)
+                    continue;
 
-                //dict.Add(upper2, freqMap);
+                dict.Add((letterChar1Upper, letterChar2Upper), freqMap);
             }
 
             return dict;
@@ -459,17 +460,17 @@ namespace MatasanoCryptoChallenge
                 for (int i = 0; i < letters.Length; ++i)
                 {
                     freqMap.Add(letters[i], frequencies[i]);
-                    //var upper = char.ToUpperInvariant(letters[i]);
-                    //if (upper != letters[i])
-                    //    freqMap.Add(upper, frequencies[i]);
+                    var upper = char.ToUpperInvariant(letters[i]);
+                    if (upper != letters[i])
+                        freqMap.Add(upper, frequencies[i]);
                 }
 
                 dict.Add(letterChar, freqMap);
-                //var upper2 = char.ToUpperInvariant(letterChar);
-                //if (upper2 == letterChar)
-                //    continue;
+                var upper2 = char.ToUpperInvariant(letterChar);
+                if (upper2 == letterChar)
+                    continue;
 
-                //dict.Add(upper2, freqMap);
+                dict.Add(upper2, freqMap);
             }
 
             return dict;
@@ -509,17 +510,17 @@ namespace MatasanoCryptoChallenge
             for (int i = 0; i < letters.Length; ++i)
             {
                 freqMap.Add(letters[i], frequencies[i]);
-                //var upper = char.ToUpperInvariant(letters[i]);
-                //if (upper == letters[i])
-                //    continue;
+                var upper = char.ToUpperInvariant(letters[i]);
+                if (upper == letters[i])
+                    continue;
 
-                //freqMap.Add(upper, frequencies[i]);
+                freqMap.Add(upper, frequencies[i]);
             }
 
             return freqMap;
         });
 
-        public static List<(byte key, double score)> XorBestMatch(ReadOnlySpan<byte> xoredBytes)
+        public static List<(byte key, double score)> XorBestMatch(ReadOnlySpan<byte> xoredBytes, string expectedChars = null)
         {
             var candidates = new List<(byte key, double score)>();
 
@@ -528,6 +529,9 @@ namespace MatasanoCryptoChallenge
             {
                 key[0] = (byte)i;
                 var plainText = Xor.ApplyRepeating(xoredBytes, key);
+
+                if (expectedChars != null && Encoding.UTF8.GetString(plainText).Any(x => !expectedChars.Contains(x)))
+                    continue;
 
                 double score = 0.0;
                 foreach (var c in plainText)
@@ -548,7 +552,7 @@ namespace MatasanoCryptoChallenge
             return new List<(byte key, double score)>(candidates.OrderByDescending(x => x.score));
         }
 
-        private static List<(byte key, double score)> XorBestMatch((char, byte)[] xoredBytes, string expectedChars)
+        private static List<(byte key, double score)> XorBestMatch((char, byte)[] xoredBytes, string expectedChars = null)
         {
             var candidates = new List<(byte key, double score)>();
 
@@ -557,7 +561,7 @@ namespace MatasanoCryptoChallenge
                 var key = (byte)i;
                 var plainText = xoredBytes.Select(x => (x.Item1, (char)(x.Item2 ^ key))).ToArray();
 
-                if (plainText.Any(x => !expectedChars.Contains(x.Item2)))
+                if (expectedChars != null && plainText.Any(x => !expectedChars.Contains(x.Item2)))
                     continue;
 
                 double score = 0.0;
@@ -579,7 +583,7 @@ namespace MatasanoCryptoChallenge
             return new List<(byte key, double score)>(candidates.OrderByDescending(x => x.score));
         }
 
-        private static List<(byte key, double score)> XorBestMatch((char, char, byte)[] xoredBytes, string expectedChars)
+        private static List<(byte key, double score)> XorBestMatch((char, char, byte)[] xoredBytes, string expectedChars = null)
         {
             var candidates = new List<(byte key, double score)>();
 
@@ -588,7 +592,7 @@ namespace MatasanoCryptoChallenge
                 var key = (byte)i;
                 var plainText = xoredBytes.Select(x => (x.Item1, x.Item2, (char)(x.Item3 ^ key))).ToArray();
 
-                if (plainText.Any(x => !expectedChars.Contains(x.Item3)))
+                if (expectedChars != null && plainText.Any(x => !expectedChars.Contains(x.Item3)))
                     continue;
 
                 double score = 0.0;
@@ -673,6 +677,58 @@ namespace MatasanoCryptoChallenge
             }
 
             return keySteam.Select(x => x.First().key).ToArray();
+        }
+
+        public static int GuessRepeatingKeyLength(ReadOnlySpan<byte> cipher, int maxKeyLength)
+        {
+            var candidates = new Dictionary<int, double>(maxKeyLength);
+            for (int i = 2; i <= maxKeyLength; ++i)
+            {
+                if (cipher.Length / i < 2)
+                    break;
+
+                var distances = new double[cipher.Length / i - 1];
+                for (int segment = 0; segment < distances.Length; ++segment)
+                {
+                    distances[segment] = Hamming.GetDistance(cipher.Slice(segment * i, i), cipher.Slice((segment + 1) * i, i)) / (double)i;
+                }
+
+                candidates[i] = distances.Average();
+            }
+
+            var len = candidates.OrderByDescending(x => x.Value).Last().Key;
+            return len;
+        }
+
+        public static byte[] BreakRepeating(ReadOnlySpan<byte> cipher, int keyLength, string expectedChars = null)
+        {
+            var keySteam = new byte[keyLength];
+
+            byte[] blockMinusOne = null, blockMinusTwo = null;
+            for (int i = 0; i < keyLength; ++i)
+            {
+                var block = new byte[cipher.Length / keyLength + (cipher.Length % keyLength != 0 ? 1 : 0)];
+                for (int j = i, b = 0; j < cipher.Length; j += keyLength, ++b)
+                {
+                    block[b] = cipher[j];
+                }
+
+                if (i == 0)
+                    keySteam[i] = Xor.XorBestMatch(block, expectedChars).First().key;
+                else if (i == 1)
+                    keySteam[i] = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1]), x)).ToArray(), expectedChars).First().key;
+                else
+                    keySteam[i] = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusTwo[n] ^ keySteam[i - 2]),
+                                                                           (char)(blockMinusOne[n] ^ keySteam[i - 1]), x))
+                                                        .ToArray(), expectedChars)
+                                                        .First()
+                                                        .key;
+
+                blockMinusTwo = blockMinusOne;
+                blockMinusOne = block;
+            }
+
+            return keySteam;
         }
     }
 
