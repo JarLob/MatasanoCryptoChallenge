@@ -395,18 +395,9 @@ namespace MatasanoCryptoChallenge
                 for (int i = 0; i < letters.Length; ++i)
                 {
                     freqMap.Add(letters[i], frequencies[i]);
-                    var upper = char.ToUpperInvariant(letters[i]);
-                    if (upper != letters[i])
-                        freqMap.Add(upper, frequencies[i]);
                 }
 
                 dict.Add((letterChar1, letterChar2), freqMap);
-                var letterChar1Upper = char.ToUpperInvariant(letterChar1);
-                var letterChar2Upper = char.ToUpperInvariant(letterChar2);
-                if (letterChar1Upper == letterChar1 && letterChar2Upper == letterChar2)
-                    continue;
-
-                dict.Add((letterChar1Upper, letterChar2Upper), freqMap);
             }
 
             return dict;
@@ -460,17 +451,9 @@ namespace MatasanoCryptoChallenge
                 for (int i = 0; i < letters.Length; ++i)
                 {
                     freqMap.Add(letters[i], frequencies[i]);
-                    var upper = char.ToUpperInvariant(letters[i]);
-                    if (upper != letters[i])
-                        freqMap.Add(upper, frequencies[i]);
                 }
 
                 dict.Add(letterChar, freqMap);
-                var upper2 = char.ToUpperInvariant(letterChar);
-                if (upper2 == letterChar)
-                    continue;
-
-                dict.Add(upper2, freqMap);
             }
 
             return dict;
@@ -510,11 +493,6 @@ namespace MatasanoCryptoChallenge
             for (int i = 0; i < letters.Length; ++i)
             {
                 freqMap.Add(letters[i], frequencies[i]);
-                var upper = char.ToUpperInvariant(letters[i]);
-                if (upper == letters[i])
-                    continue;
-
-                freqMap.Add(upper, frequencies[i]);
             }
 
             return freqMap;
@@ -536,7 +514,7 @@ namespace MatasanoCryptoChallenge
                 double score = 0.0;
                 foreach (var c in plainText)
                 {
-                    if (EnglishFreq.Value.TryGetValue((char)c, out var sc))
+                    if (EnglishFreq.Value.TryGetValue(char.ToLowerInvariant((char)c), out var sc))
                         score += sc;
                 }
 
@@ -567,7 +545,7 @@ namespace MatasanoCryptoChallenge
                 double score = 0.0;
                 foreach (var c in plainText)
                 {
-                    if (EnglishFreq2.Value.TryGetValue(c.Item1, out var fr) && fr.TryGetValue(c.Item2, out var sc))
+                    if (EnglishFreq2.Value.TryGetValue(char.ToLowerInvariant(c.Item1), out var fr) && fr.TryGetValue(char.ToLowerInvariant(c.Item2), out var sc))
                         score += sc;
                 }
 
@@ -598,8 +576,11 @@ namespace MatasanoCryptoChallenge
                 double score = 0.0;
                 foreach (var c in plainText)
                 {
-                    if (EnglishFreq3.Value.TryGetValue((c.Item1, c.Item2), out var fr) && fr.TryGetValue(c.Item3, out var sc))
+                    if (EnglishFreq3.Value.TryGetValue((char.ToLowerInvariant(c.Item1), char.ToLowerInvariant(c.Item2)), out var fr) &&
+                        fr.TryGetValue(char.ToLowerInvariant(c.Item3), out var sc))
+                    {
                         score += sc;
+                    }
                 }
 
                 if (score > 0.0)
@@ -718,11 +699,19 @@ namespace MatasanoCryptoChallenge
                 else if (i == 1)
                     keySteam[i] = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1]), x)).ToArray(), expectedChars).First().key;
                 else
-                    keySteam[i] = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusTwo[n] ^ keySteam[i - 2]),
+                {
+                    var candidates = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusTwo[n] ^ keySteam[i - 2]),
                                                                            (char)(blockMinusOne[n] ^ keySteam[i - 1]), x))
-                                                        .ToArray(), expectedChars)
-                                                        .First()
-                                                        .key;
+                                                           .ToArray(), expectedChars);
+
+                    if (!candidates.Any())
+                        candidates = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1]), x)).ToArray(), expectedChars);
+
+                    if (!candidates.Any())
+                        candidates = Xor.XorBestMatch(block, expectedChars);
+
+                    keySteam[i] = candidates.First().key;
+                }
 
                 blockMinusTwo = blockMinusOne;
                 blockMinusOne = block;

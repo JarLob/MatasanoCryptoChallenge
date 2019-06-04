@@ -129,11 +129,13 @@ namespace Tests
         {
             var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("19.txt", 0);
 
+            var minLength = encryptedLines.Min(x => x.Length);
             var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? ";
+
             var keystream = Xor.GetCommonKeyStream(encryptedLines, expectedChars);
 
             var maxDistance = 0.0;
-            const double tolerableDistance = 18.0;
+            const double tolerableDistance = 20.0;
 
             for (int j = 0; j < encryptedLines.Count; j++)
             {
@@ -143,16 +145,25 @@ namespace Tests
                     line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
 
                 var plainText = new string(line);
-                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(), plainText.Select(x => (byte)x).ToArray());
+
+                Assert.Equal(plainTextLines[j].ToLowerInvariant().Take(minLength), plainText.ToLowerInvariant().Take(minLength));
+
+                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(),
+                                                   plainText.ToLowerInvariant().Select(x => (byte)x).ToArray());
                 maxDistance = Math.Max(distance, maxDistance);
 
                 if ((distance - tolerableDistance) > 0.00001)
                 {
-                    output.WriteLine($"{maxDistance}");
-                    output.WriteLine(plainText);
+                    output.WriteLine($"{distance}");
+                    output.WriteLine(plainText.ToLowerInvariant());
+                    output.WriteLine(plainTextLines[j].ToLowerInvariant());
                 }
             }
 
+            if ((maxDistance - tolerableDistance) > 0.00001)
+            {
+                output.WriteLine($"{maxDistance}");
+            }
             Assert.True(tolerableDistance >= maxDistance);
         }
 
@@ -162,25 +173,56 @@ namespace Tests
             var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("20.txt", 0);
 
             var minLength = encryptedLines.Min(x => x.Length);
-            var cipher = encryptedLines.Select(x => x.Take(minLength)).SelectMany(x => x).ToArray();
+            var maxLength = encryptedLines.Max(x => x.Length);
             var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? /";
 
-            var keystream = Xor.BreakRepeating(cipher, minLength, expectedChars);
+            var keystream = new List<byte>(maxLength);
+
+            for (int i = minLength; i <= maxLength; ++i)
+            {
+                var cipher = encryptedLines.Where(x => x.Length >= i)
+                                           .Select(x => x.Take(i))
+                                           .SelectMany(x => x)
+                                           .ToArray();
+
+                var key = Xor.BreakRepeating(cipher, i, expectedChars);
+                if (i == minLength)
+                    keystream.AddRange(key);
+                else
+                    keystream.Add(key[i - 1]);
+            }
 
             var maxDistance = 0.0;
+            const double tolerableDistance = 39.0;
+
             for (int j = 0; j < encryptedLines.Count; j++)
             {
                 byte[] encryptedLine = encryptedLines[j];
-                var line = new char[minLength];
-                for (int i = 0; i < minLength; ++i)
+                var line = new char[encryptedLine.Length];
+                for (int i = 0; i < line.Length; ++i)
                     line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
 
                 var plainText = new string(line);
-                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Take(minLength).Select(x => (byte)x).ToArray(), plainText.Select(x => (byte)x).ToArray());
+
+                Assert.Equal(plainTextLines[j].ToLowerInvariant().Take(minLength), plainText.ToLowerInvariant().Take(minLength));
+
+                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(),
+                                                   plainText.ToLowerInvariant().Select(x => (byte)x).ToArray());
                 maxDistance = Math.Max(distance, maxDistance);
+
+                if ((distance - tolerableDistance) > 0.00001)
+                {
+                    output.WriteLine($"{distance}");
+                    output.WriteLine(plainText.ToLowerInvariant());
+                    output.WriteLine(plainTextLines[j].ToLowerInvariant());
+                }
             }
 
-            Assert.Equal(6.0, maxDistance);
+            if ((maxDistance - tolerableDistance) > 0.00001)
+            {
+                output.WriteLine($"{maxDistance}");
+            }
+            Assert.True(tolerableDistance >= maxDistance);
         }
     }
 }
