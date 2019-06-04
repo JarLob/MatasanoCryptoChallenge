@@ -600,24 +600,26 @@ namespace MatasanoCryptoChallenge
             int i = 0;
             while (true)
             {
+                candidates.Clear();
+
                 if (encryptedLines.TrueForAll(x => x.Length <= i))
                     break;
 
                 for (int b = 0; b < 256; ++b)
                 {
                     if (encryptedLines.TrueForAll(x =>
-                    {
-                        if (x.Length <= i)
-                            return false;
+                                                    {
+                                                        if (x.Length <= i)
+                                                            return true;
 
-                        return expectedChars.Contains(Convert.ToChar((byte)(x[i] ^ b)));
-                    }))
+                                                        return expectedChars.Contains(Convert.ToChar((byte)(x[i] ^ b)));
+                                                    }))
                     {
                         candidates.Add((byte)b);
                     }
                 }
 
-                if (candidates.Count != 1)
+                if (candidates.Count > 1)
                 {
                     if (i == 0)
                     {
@@ -653,7 +655,6 @@ namespace MatasanoCryptoChallenge
                     keySteam[i] = new List<(byte key, double score)>{ (candidates[0], double.MaxValue) };
                 }
 
-                candidates.Clear();
                 ++i;
             }
 
