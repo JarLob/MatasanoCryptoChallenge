@@ -101,7 +101,7 @@ namespace Tests
 
             using (var rnd = RandomNumberGenerator.Create())
             {
-                var key = new byte[16];
+                var key = new byte[16];// { (byte)0x03, (byte)0x39, (byte)0x1e, (byte)0xb9, (byte)0x0f, (byte)0xf7, (byte)0xbc, (byte)0xe4, (byte)0x77, (byte)0x3e, (byte)0x9f, (byte)0x58, (byte)0xcc, (byte)0x9c, (byte)0xd3, (byte)0x28 }; ;
                 rnd.GetBytes(key);
 
                 foreach (var line in lines)
@@ -129,13 +129,9 @@ namespace Tests
         {
             var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("19.txt", 0);
 
-            var minLength = encryptedLines.Min(x => x.Length);
             var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? ";
 
             var keystream = Xor.GetCommonKeyStream(encryptedLines, expectedChars);
-
-            var maxDistance = 0.0;
-            const double tolerableDistance = 20.0;
 
             for (int j = 0; j < encryptedLines.Count; j++)
             {
@@ -144,27 +140,28 @@ namespace Tests
                 for (int i = 0; i < encryptedLine.Length; ++i)
                     line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
 
-                var plainText = new string(line);
+                var decryptedLowerCase = new string(line).ToLowerInvariant();
+                var originalLowerCase = plainTextLines[j].ToLowerInvariant();
 
-                Assert.Equal(plainTextLines[j].ToLowerInvariant().Take(minLength), plainText.ToLowerInvariant().Take(minLength));
-
-                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(),
-                                                   plainText.ToLowerInvariant().Select(x => (byte)x).ToArray());
-                maxDistance = Math.Max(distance, maxDistance);
-
-                if ((distance - tolerableDistance) > 0.00001)
+                switch (j)
                 {
-                    output.WriteLine($"{distance}");
-                    output.WriteLine(plainText.ToLowerInvariant());
-                    output.WriteLine(plainTextLines[j].ToLowerInvariant());
+                    case 4:
+                        //            i have passed with a nod of the head
+                        Assert.Equal("i have passed with a nod of the hiln", decryptedLowerCase);
+                        break;
+                    case 27:
+                        //            he might have won fame in the end,
+                        Assert.Equal("he might have won fame in the end ", decryptedLowerCase);
+                        break;
+                    case 37:
+                        //            he, too, has been changed in his turn,
+                        Assert.Equal("he, too, has been changed in his xxxis", decryptedLowerCase);
+                        break;
+                    default:
+                        Assert.Equal(originalLowerCase, decryptedLowerCase);
+                        break;
                 }
             }
-
-            if ((maxDistance - tolerableDistance) > 0.00001)
-            {
-                output.WriteLine($"{maxDistance}");
-            }
-            Assert.True(tolerableDistance >= maxDistance);
         }
 
         [Fact]
@@ -192,9 +189,6 @@ namespace Tests
                     keystream.Add(key[i - 1]);
             }
 
-            var maxDistance = 0.0;
-            const double tolerableDistance = 39.0;
-
             for (int j = 0; j < encryptedLines.Count; j++)
             {
                 byte[] encryptedLine = encryptedLines[j];
@@ -202,27 +196,34 @@ namespace Tests
                 for (int i = 0; i < line.Length; ++i)
                     line[i] = Convert.ToChar((byte)(encryptedLine[i] ^ keystream[i]));
 
-                var plainText = new string(line);
+                var decryptedLowerCase = new string(line).ToLowerInvariant();
+                var originalLowerCase = plainTextLines[j].ToLowerInvariant();
 
-                Assert.Equal(plainTextLines[j].ToLowerInvariant().Take(minLength), plainText.ToLowerInvariant().Take(minLength));
-
-                var distance = Hamming.GetDistance(plainTextLines[j].ToLowerInvariant().Select(x => (byte)x).ToArray(),
-                                                   plainText.ToLowerInvariant().Select(x => (byte)x).ToArray());
-                maxDistance = Math.Max(distance, maxDistance);
-
-                if ((distance - tolerableDistance) > 0.00001)
+                switch (j)
                 {
-                    output.WriteLine($"{distance}");
-                    output.WriteLine(plainText.ToLowerInvariant());
-                    output.WriteLine(plainTextLines[j].ToLowerInvariant());
+                    case 21:
+                        //            shake 'till your clear, make it disappear, make the next / after the ceremony, let the rhyme rest in peace
+                        Assert.Equal("shake 'till your clear, make it disappear, make the next / after the ceremony, let the rhyme rest iy peace", decryptedLowerCase);
+                        break;
+                    case 26:
+                        Assert.Equal(new string(originalLowerCase.Replace("observe", "observr").SkipLast(12).ToArray()), new string(decryptedLowerCase.SkipLast(12).ToArray()));
+                        break;
+                    case 29:
+                        //            program into the speed of the rhyme, prepare to start / rhythm's out of the radius, insane as the craziest
+                        Assert.Equal("program into the speed of the rhyme, prepare to start / rhythm's out of the radius, insane as the ceaziest", decryptedLowerCase);
+                        break;
+                    case 41:
+                        //            i wanna hear some of them def rhymes, you know what i'm sayin'? / and together, we can get paid in full
+                        Assert.Equal("i wanna hear some of them def rhymes, you know what i'm sayin'? / and together, we can get paid in qull", decryptedLowerCase);
+                        break;
+                    case 46:
+                        Assert.Equal(new string(originalLowerCase.Replace("move", "mxve").SkipLast(10).ToArray()), new string(decryptedLowerCase.SkipLast(10).ToArray()));
+                        break;
+                    default:
+                        Assert.Equal(originalLowerCase, decryptedLowerCase);
+                        break;
                 }
             }
-
-            if ((maxDistance - tolerableDistance) > 0.00001)
-            {
-                output.WriteLine($"{maxDistance}");
-            }
-            Assert.True(tolerableDistance >= maxDistance);
         }
     }
 }
