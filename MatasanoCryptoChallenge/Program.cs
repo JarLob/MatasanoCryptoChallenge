@@ -530,6 +530,68 @@ namespace MatasanoCryptoChallenge
             return new List<(byte key, double score)>(candidates.OrderByDescending(x => x.score));
         }
 
+        private static List<(byte key, double score)> XorBestMatch((char, byte)[] xoredBytes, string expectedChars = null)
+        {
+            var candidates = new List<(byte key, double score)>();
+
+            for (int i = 0; i < 256; ++i)
+            {
+                var key = (byte)i;
+                var plainText = xoredBytes.Select(x => (x.Item1, (char)(x.Item2 ^ key))).ToArray();
+
+                if (expectedChars != null && plainText.Any(x => !expectedChars.Contains(x.Item2)))
+                    continue;
+
+                double score = 0.0;
+                foreach (var c in plainText)
+                {
+                    if (EnglishFreq2.Value.TryGetValue(char.ToLowerInvariant(c.Item1), out var fr) && fr.TryGetValue(char.ToLowerInvariant(c.Item2), out var sc))
+                        score += sc;
+                }
+
+                if (score > 0.0)
+                {
+                    candidates.Add((key, score));
+                }
+            }
+
+            if (!candidates.Any())
+                throw new Exception();
+
+            return new List<(byte key, double score)>(candidates.OrderByDescending(x => x.score));
+        }
+
+        private static List<(byte key, double score)> XorBestMatch((char, char, byte)[] xoredBytes, string expectedChars = null)
+        {
+            var candidates = new List<(byte key, double score)>();
+
+            for (int i = 0; i < 256; ++i)
+            {
+                var key = (byte)i;
+                var plainText = xoredBytes.Select(x => (x.Item1, x.Item2, (char)(x.Item3 ^ key))).ToArray();
+
+                if (expectedChars != null && plainText.Any(x => !expectedChars.Contains(x.Item3)))
+                    continue;
+
+                double score = 0.0;
+                foreach (var c in plainText)
+                {
+                    if (EnglishFreq3.Value.TryGetValue((char.ToLowerInvariant(c.Item1), char.ToLowerInvariant(c.Item2)), out var fr) &&
+                        fr.TryGetValue(char.ToLowerInvariant(c.Item3), out var sc))
+                    {
+                        score += sc;
+                    }
+                }
+
+                if (score > 0.0)
+                {
+                    candidates.Add((key, score));
+                }
+            }
+
+            return new List<(byte key, double score)>(candidates.OrderByDescending(x => x.score));
+        }
+
         public static byte[] GetCommonKeyStream(List<byte[]> encryptedLines, string expectedChars)
         {
             var candidates = new List<byte>();
@@ -559,9 +621,34 @@ namespace MatasanoCryptoChallenge
 
                 if (candidates.Count > 1)
                 {
-                    keySteam[i] = Xor.XorBestMatch(encryptedLines.Where(x => x.Length > i)
-                                                                    .Select(x => x[i])
-                                                                    .ToArray());
+                    if (i == 0)
+                    {
+                        keySteam[i] = Xor.XorBestMatch(encryptedLines.Where(x => x.Length > i)
+                                                                     .Select(x => x[i])
+                                                                     .ToArray());
+                    }
+                    else if (i == 1)
+                    {
+                        keySteam[i] = Xor.XorBestMatch(encryptedLines.Where(x => x.Length > i)
+                                                                     .Select(x => ((char)(x[i - 1] ^ keySteam[i - 1].First().key), x[i]))
+                                                                     .ToArray(),
+                                                       expectedChars);
+                    }
+                    else
+                    {
+                        var matches = Xor.XorBestMatch(encryptedLines.Where(x => x.Length > i)
+                                                                     .Select(x => ((char)(x[i - 2] ^ keySteam[i - 2].First().key), (char)(x[i - 1] ^ keySteam[i - 1].First().key), x[i]))
+                                                                     .ToArray(),
+                                                       expectedChars);
+
+                        if (!matches.Any())
+                        {
+                            keySteam[i - 1].RemoveAt(0);
+                            continue;
+                        }
+
+                        keySteam[i] = matches;
+                    }
                 }
                 else
                 {
@@ -599,6 +686,7 @@ namespace MatasanoCryptoChallenge
         {
             var keySteam = new byte[keyLength];
 
+            byte[] blockMinusOne = null, blockMinusTwo = null;
             for (int i = 0; i < keyLength; ++i)
             {
                 var block = new byte[cipher.Length / keyLength + (cipher.Length % keyLength != 0 ? 1 : 0)];
@@ -607,7 +695,27 @@ namespace MatasanoCryptoChallenge
                     block[b] = cipher[j];
                 }
 
-                keySteam[i] = Xor.XorBestMatch(block, expectedChars).First().key;
+                if (i == 0)
+                    keySteam[i] = Xor.XorBestMatch(block, expectedChars).First().key;
+                else if (i == 1)
+                    keySteam[i] = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1]), x)).ToArray(), expectedChars).First().key;
+                else
+                {
+                    var candidates = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusTwo[n] ^ keySteam[i - 2]),
+                                                                           (char)(blockMinusOne[n] ^ keySteam[i - 1]), x))
+                                                           .ToArray(), expectedChars);
+
+                    if (!candidates.Any())
+                        candidates = Xor.XorBestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1]), x)).ToArray(), expectedChars);
+
+                    if (!candidates.Any())
+                        candidates = Xor.XorBestMatch(block, expectedChars);
+
+                    keySteam[i] = candidates.First().key;
+                }
+
+                blockMinusTwo = blockMinusOne;
+                blockMinusOne = block;
             }
 
             return keySteam;
