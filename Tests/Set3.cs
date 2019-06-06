@@ -230,21 +230,58 @@ namespace Tests
         public void Challenge21_Implement_the_MT19937_Mersenne_Twister_RNG()
         {
             var rng = new MT19937();
-            rng.seed_mt(5489);
+            rng.SeedMt(5489);
 
             var list1 = new List<uint>(1000);
             for (int i = 0; i < 1000; ++i)
-                list1.Add(rng.extract_number());
+                list1.Add(rng.ExtractNumber());
 
             var rng2 = new MT19937();
-            rng2.seed_mt(5489);
+            rng2.SeedMt(5489);
 
             var list2 = new List<uint>(1000);
             for (int i = 0; i < 1000; ++i)
-                list2.Add(rng2.extract_number());
+                list2.Add(rng2.ExtractNumber());
 
             Assert.Equal(list1, list2);
             Assert.Equal(list1.Take(10), new uint[] { 0xD091BB5C, 0x22AE9EF6, 0xE7E1FAEE, 0xD5C31F79, 0x2082352C, 0xF807B7DF, 0xE9D30005, 0x3895AFE1, 0xA1E24BBA, 0x4EE4092B });
+        }
+
+        [Fact]
+        public void Challenge22_Crack_an_MT19937_seed()
+        {
+            int unixTimestamp;
+            uint seed;
+            uint currentRandomNumber;
+
+            using (var crnd = RandomNumberGenerator.Create())
+            {
+                unixTimestamp = (int)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+                unixTimestamp += CryptoRandom.GetInt(crnd, 40, 1000);
+
+                var rng = new MT19937();
+                seed = (uint)unixTimestamp;
+                rng.SeedMt(seed);
+
+                unixTimestamp += CryptoRandom.GetInt(crnd, 40, 1000);
+                currentRandomNumber = rng.ExtractNumber();
+            }
+
+            // check every possible second from the last twenty-four hours
+            uint foundSeed = 0;
+            for (int i = unixTimestamp; i > (unixTimestamp - 86400); --i)
+            {
+                var rng = new MT19937();
+                rng.SeedMt((uint)i);
+
+                if (rng.ExtractNumber() == currentRandomNumber)
+                {
+                    foundSeed = (uint)i;
+                    break;
+                }
+            }
+
+            Assert.Equal(seed, foundSeed);
         }
     }
 }

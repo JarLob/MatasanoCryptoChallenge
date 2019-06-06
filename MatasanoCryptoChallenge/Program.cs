@@ -745,7 +745,7 @@ namespace MatasanoCryptoChallenge
         private const uint upper_mask = ~lower_mask & 0xffffffffU; // lowest w bits of (not lower_mask)
 
         // Initialize the generator from a seed
-        public void seed_mt(uint seed)
+        public void SeedMt(uint seed)
         {
             index = n;
             MT[0] = seed;
@@ -756,7 +756,7 @@ namespace MatasanoCryptoChallenge
 
         // Extract a tempered value based on MT[index]
         // calling twist() every n numbers
-        public uint extract_number()
+        public uint ExtractNumber()
         {
             if (index >= n)
             {
@@ -765,7 +765,7 @@ namespace MatasanoCryptoChallenge
                     throw new Exception("Generator was never seeded");
                     // Alternatively, seed with constant value; 5489 is used in reference C code[46]
                 }
-                twist();
+                Twist();
             }
 
             uint y = MT[index];
@@ -779,7 +779,7 @@ namespace MatasanoCryptoChallenge
         }
 
         // Generate the next n values from the series x_i
-        public void twist()
+        private void Twist()
         {
             for (int i = 0; i < n; ++i)
             {
