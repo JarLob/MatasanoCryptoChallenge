@@ -225,5 +225,26 @@ namespace Tests
                 }
             }
         }
+
+        [Fact]
+        public void Challenge21_Implement_the_MT19937_Mersenne_Twister_RNG()
+        {
+            var rng = new MT19937();
+            rng.seed_mt(5489);
+
+            var list1 = new List<uint>(1000);
+            for (int i = 0; i < 1000; ++i)
+                list1.Add(rng.extract_number());
+
+            var rng2 = new MT19937();
+            rng2.seed_mt(5489);
+
+            var list2 = new List<uint>(1000);
+            for (int i = 0; i < 1000; ++i)
+                list2.Add(rng2.extract_number());
+
+            Assert.Equal(list1, list2);
+            Assert.Equal(list1.Take(10), new uint[] { 0xD091BB5C, 0x22AE9EF6, 0xE7E1FAEE, 0xD5C31F79, 0x2082352C, 0xF807B7DF, 0xE9D30005, 0x3895AFE1, 0xA1E24BBA, 0x4EE4092B });
+        }
     }
 }
