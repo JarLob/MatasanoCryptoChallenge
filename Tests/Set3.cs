@@ -283,5 +283,33 @@ namespace Tests
 
             Assert.Equal(seed, foundSeed);
         }
+
+        [Fact]
+        public void Challenge23_Clone_an_MT19937_RNG_from_its_output()
+        {
+            var rng = new MT19937();
+            rng.SeedMt(5489);
+
+            // run random number of ExtractNumber
+            // the cloning doesn't depend on internal index state
+            using (var crnd = RandomNumberGenerator.Create())
+            {
+                var runCount = CryptoRandom.GetInt(crnd, 1, 2000);
+                for (int i = 0; i < runCount; ++i)
+                    rng.ExtractNumber();
+            }
+
+            var states = new List<uint>(624);
+            for (int i = 0; i < states.Capacity; ++i)
+            {
+                states.Add(rng.ExtractNumber());
+            }
+
+            var clone = MT19937Cloner.Clone(states);
+            for (int i = 0; i < 1000; ++i)
+            {
+                Assert.Equal(rng.ExtractNumber(), clone.ExtractNumber());
+            }
+        }
     }
 }

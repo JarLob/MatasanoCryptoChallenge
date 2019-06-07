@@ -270,13 +270,13 @@ namespace MatasanoCryptoChallenge
                     for (; i + sizeof(ulong) < xArray.Length; i += sizeof(ulong))
                     {
                         var diff = *(ulong*)&pX[i] ^ *(ulong*)&pY[i];
-                        count += BitCount(diff);
+                        count += Bit.GetCount(diff);
                     }
 
                     for (; i + sizeof(uint) < xArray.Length; i += sizeof(uint))
                     {
                         var diff = *(uint*)&pX[i] ^ *(uint*)&pY[i];
-                        count += BitCount(diff);
+                        count += Bit.GetCount(diff);
                     }
                 }
             }
@@ -284,27 +284,30 @@ namespace MatasanoCryptoChallenge
             for (; i < xArray.Length; ++i)
             {
                 var diff = (byte)(xArray[i] ^ yArray[i]);
-                count += BitCount(diff);
+                count += Bit.GetCount(diff);
             }
 
             return count;
         }
+    }
 
-        public static byte BitCount(ulong value)
+    public static class Bit
+    {
+        public static byte GetCount(ulong value)
         {
             var result = value - ((value >> 1) & 0x5555555555555555UL);
             result = (result & 0x3333333333333333UL) + ((result >> 2) & 0x3333333333333333UL);
             return (byte)(unchecked(((result + (result >> 4)) & 0xF0F0F0F0F0F0F0FUL) * 0x101010101010101UL) >> 56);
         }
 
-        public static byte BitCount(uint value)
+        public static byte GetCount(uint value)
         {
             var result = value - ((value >> 1) & 0x55555555);
             result = (result & 0x33333333) + ((result >> 2) & 0x33333333);
             return (byte)(unchecked(((result + (result >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24);
         }
 
-        public static byte BitCount(byte value)
+        public static byte GetCount(byte value)
         {
             byte count = 0;
             for (; value != 0; ++count)
@@ -313,6 +316,26 @@ namespace MatasanoCryptoChallenge
             }
 
             return count;
+        }
+
+        public static bool Get(uint value, int index)
+        {
+            if (index < 0 || index > 31)
+                throw new Exception();
+
+            value = value >> (31 - index);
+            return (value & 1U) != 0U;
+        }
+
+        public static void Set(ref uint integer, int index, bool bit)
+        {
+            if (index < 0 || index > 31)
+                throw new Exception();
+
+            if(bit)
+                integer = integer | (1U << (31 - index));
+            else
+                integer &= ~(1U << (31 - index));
         }
     }
 
@@ -729,6 +752,59 @@ namespace MatasanoCryptoChallenge
         }
     }
 
+    public static class MT19937Cloner
+    {
+        public static MT19937 Clone(IReadOnlyList<uint> outputs)
+        {
+            if (outputs.Count != 624)
+                throw new Exception();
+
+            return new MT19937(outputs.Select(x => ReverseTempering(x)));
+        }
+
+        private const int u = 11, s = 7, t = 15, l = 18;
+        private const uint d = 0xFFFFFFFFU, b = 0x9D2C5680U, c = 0xEFC60000U;
+
+        public static uint ReverseTempering(uint y)
+        {
+            for (int i = 0; i < 32; ++i)
+            {
+                bool bit = Bit.Get(y, i);
+
+                if (i < l)
+                    Bit.Set(ref y, i, bit);
+                else
+                    Bit.Set(ref y, i, Bit.Get(y, i - l) ^ bit);
+            }
+
+            for (int i = 31; i >= 0; --i)
+            {
+                if (i > 31 - t)
+                    Bit.Set(ref y, i, Bit.Get(y, i));
+                else
+                    Bit.Set(ref y, i, Bit.Get(y, i) ^ (Bit.Get(y, i + t) & Bit.Get(c, i)));
+            }
+
+            for (int i = 31; i >= 0; --i)
+            {
+                if (i > 31 - s)
+                    Bit.Set(ref y, i, Bit.Get(y, i));
+                else
+                    Bit.Set(ref y, i, Bit.Get(y, i) ^ (Bit.Get(y, i + s) & Bit.Get(b, i)));
+            }
+
+            for (int i = 0; i < 32; ++i)
+            {
+                if (i < u)
+                    Bit.Set(ref y, i, Bit.Get(y, i));
+                else
+                    Bit.Set(ref y, i, Bit.Get(y, i) ^ (Bit.Get(y, i - u) & Bit.Get(d, i)));
+            }
+
+            return y;
+        }
+    }
+
     public class MT19937
     {
         private const uint w = 32U, n = 624U, m = 397U, r = 31U, f = 1812433253U;
@@ -743,6 +819,20 @@ namespace MatasanoCryptoChallenge
 
         private const uint lower_mask = unchecked ((1 << (int)r) - 1); // That is, the binary number of r 1's
         private const uint upper_mask = ~lower_mask & 0xffffffffU; // lowest w bits of (not lower_mask)
+
+        public MT19937(IEnumerable<uint> MT)
+        {
+            var mt = MT.ToArray();
+            if (mt.Length != 624)
+                throw new Exception();
+
+            this.MT = mt;
+            index = n;
+        }
+
+        public MT19937()
+        {
+        }
 
         // Initialize the generator from a seed
         public void SeedMt(uint seed)
@@ -768,14 +858,17 @@ namespace MatasanoCryptoChallenge
                 Twist();
             }
 
-            uint y = MT[index];
+            uint y = MT[index++];
+            return Temper(y);
+        }
+
+        private static uint Temper(uint y)
+        {
             y = y ^ ((y >> u) & d);
             y = y ^ ((y << s) & b);
             y = y ^ ((y << t) & c);
             y = y ^ (y >> l);
-
-            ++index;
-            return 0xffffffffU & y;
+            return y;
         }
 
         // Generate the next n values from the series x_i
