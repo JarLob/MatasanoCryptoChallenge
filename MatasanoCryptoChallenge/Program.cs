@@ -937,7 +937,8 @@ namespace MatasanoCryptoChallenge
 
     public static class CbcPaddingOracle
     {
-        public static ReadOnlySpan<byte> Decrypt(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv, byte[] key)
+        public static ReadOnlySpan<byte> Decrypt(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv,
+                                                 Func<ReadOnlySpan<byte>, ReadOnlySpan<byte>, bool> validateOracle)
         {
             if (encrypted.Length % 16 != 0)
                 throw new Exception();
@@ -973,7 +974,7 @@ namespace MatasanoCryptoChallenge
                             throw new Exception("byte wasn't found");
 
                         prevBlock[i] = (byte)b;
-                        if (Validate(encrypted.Slice(block * 16, 16), prevBlock, key))
+                        if (validateOracle(encrypted.Slice(block * 16, 16), prevBlock))
                         {
                             if (i != 0)
                             {
@@ -981,7 +982,7 @@ namespace MatasanoCryptoChallenge
                                 // But may accidentally find "0x02 0x02"
                                 // Let's modify i - 1 byte. If the first case the byte is not used for padding and doesn't affect validation
                                 prevBlock[i - 1] += 1;
-                                if (!Validate(encrypted.Slice(block * 16, 16), prevBlock, key))
+                                if (!validateOracle(encrypted.Slice(block * 16, 16), prevBlock))
                                     continue;
                             }
 
@@ -993,19 +994,6 @@ namespace MatasanoCryptoChallenge
             }
 
             return PKCS7.StripPad(decrypted);
-        }
-
-        private static bool Validate(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv, byte[] key)
-        {
-            try
-            {
-                MyAes.DecryptCbcPkcs7(encrypted, iv, key);
-                return true;
-            }
-            catch (CryptographicException e) when (e.Message == "Padding is invalid and cannot be removed.")
-            {
-                return false;
-            }
         }
     }
 

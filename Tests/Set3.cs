@@ -71,8 +71,21 @@ namespace Tests
                     var iv = new byte[16];
                     rnd.GetBytes(iv);
 
+                    bool ValidateOracle(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv)
+                    {
+                        try
+                        {
+                            MyAes.DecryptCbcPkcs7(encrypted, iv, key);
+                            return true;
+                        }
+                        catch (CryptographicException e) when (e.Message == "Padding is invalid and cannot be removed.")
+                        {
+                            return false;
+                        }
+                    }
+
                     var encrypted = MyAes.EncryptCbcPkcs7(input, iv, key);
-                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, iv, key);
+                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, iv, ValidateOracle);
                     Assert.Equal(input, decrypted.ToArray());
                 }
             }
