@@ -27,7 +27,7 @@ namespace Tests
 
             cipher = MyAes.EncryptCbcPkcs7(data, iv, key);
 
-            using (var aes2 = new AesCryptoServiceProvider())
+            using (var aes2 = Aes.Create())
             {
                 aes2.Key = key;
                 aes2.IV = iv;
@@ -38,7 +38,7 @@ namespace Tests
             Assert.Equal(data, decrypted);
 
             cipher = Convert.FromBase64String(File.ReadAllText("10.txt"));
-            using (var aes2 = new AesCryptoServiceProvider())
+            using (var aes2 = Aes.Create())
             {
                 aes2.Key = Encoding.UTF8.GetBytes("YELLOW SUBMARINE");
                 aes2.IV  = iv;
