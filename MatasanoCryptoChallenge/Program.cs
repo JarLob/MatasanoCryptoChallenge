@@ -7,13 +7,6 @@ using System.Text;
 
 namespace MatasanoCryptoChallenge
 {
-    class Program
-    {
-        static void Main(string[] args)
-        {
-        }
-    }
-
     public static class Hex
     {
         public static byte[] ToBytes(string hex)
