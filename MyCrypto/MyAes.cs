@@ -1,7 +1,6 @@
-﻿using System;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 
-namespace MatasanoCryptoChallenge
+namespace MyCrypto
 {
     public static class MyAes
     {
@@ -62,7 +61,7 @@ namespace MatasanoCryptoChallenge
             return _LibraryEncrypt(data, null, key, CipherMode.ECB, padding);
         }
 
-        public static byte[] _LibraryEncrypt(byte[] data, byte[] iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
+        public static byte[] _LibraryEncrypt(byte[] data, byte[]? iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
         {
             using (var aes = Aes.Create())
             {
@@ -157,7 +156,7 @@ namespace MatasanoCryptoChallenge
             return PKCS7.StripPad(output);
         }
 
-        public static byte[] _LibraryDecrypt(byte[] cipher, byte[] iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
+        public static byte[] _LibraryDecrypt(byte[] cipher, byte[]? iv, byte[] key, CipherMode mode, PaddingMode padding = PaddingMode.PKCS7)
         {
             using (var aes = Aes.Create())
             {

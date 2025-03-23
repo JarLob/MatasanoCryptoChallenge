@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Text;
 
-namespace MatasanoCryptoChallenge
+namespace Tests
 {
     public static class Hex
     {

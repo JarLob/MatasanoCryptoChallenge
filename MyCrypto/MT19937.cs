@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
-namespace MatasanoCryptoChallenge
+﻿namespace MyCrypto
 {
     public class MT19937
     {

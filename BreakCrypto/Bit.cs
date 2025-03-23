@@ -2,7 +2,7 @@
 
 namespace MatasanoCryptoChallenge
 {
-    public static class Bit
+    static class Bit
     {
         public static byte GetCount(ulong value)
         {

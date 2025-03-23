@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using MatasanoCryptoChallenge;
+using MyCrypto;
 using Xunit;
 
 namespace Tests
@@ -30,7 +30,7 @@ namespace Tests
         public void Challenge03_SingleByteBreakXOR()
         {
             var bytes = Hex.ToBytes("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
-            var bestMatch = Xor.XorBestMatch(bytes).First();
+            var bestMatch = XorBreaker.BestMatch(bytes).First();
             var plainText = Encoding.UTF8.GetString(Xor.ApplyRepeating(bytes, new [] {bestMatch.key}));
 
             Assert.Equal("Cooking MC's like a pound of bacon", plainText);
@@ -43,7 +43,7 @@ namespace Tests
             var candidates = new List<(string line, byte key, double score)>(lines.Length);
             foreach (var line in lines)
             {
-                var c = Xor.XorBestMatch(Hex.ToBytes(line)).First();
+                var c = XorBreaker.BestMatch(Hex.ToBytes(line)).First();
                 candidates.Add((line, c.key, c.score));
             }
 
@@ -68,8 +68,8 @@ namespace Tests
             var base64 = File.ReadAllText("Data/6.txt").Replace("\n", "");
             var cipher = Convert.FromBase64String(base64);
 
-            var len = Xor.GuessRepeatingKeyLength(cipher, 40);
-            var key = Xor.BreakRepeating(cipher, len);
+            var len = XorBreaker.GuessRepeatingKeyLength(cipher, 40);
+            var key = XorBreaker.BreakRepeating(cipher, len);
 
             Assert.Equal("Terminator X: Bring the noise", Encoding.UTF8.GetString(key));
 

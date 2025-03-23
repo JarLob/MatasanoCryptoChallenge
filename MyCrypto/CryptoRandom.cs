@@ -1,7 +1,6 @@
-﻿using System;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 
-namespace MatasanoCryptoChallenge
+namespace MyCrypto
 {
     public static class CryptoRandom
     {

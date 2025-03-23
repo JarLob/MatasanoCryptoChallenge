@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using MatasanoCryptoChallenge;
+using MyCrypto;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -144,7 +145,7 @@ namespace Tests
 
             var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? ";
 
-            var keystream = Xor.GetCommonKeyStream(encryptedLines, expectedChars);
+            var keystream = XorBreaker.GetCommonKeyStream(encryptedLines, expectedChars);
 
             for (int j = 0; j < encryptedLines.Count; j++)
             {
@@ -195,7 +196,7 @@ namespace Tests
                                            .SelectMany(x => x)
                                            .ToArray();
 
-                var key = Xor.BreakRepeating(cipher, i, expectedChars);
+                var key = XorBreaker.BreakRepeating(cipher, i, expectedChars);
                 if (i == minLength)
                     keystream.AddRange(key);
                 else

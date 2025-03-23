@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Security.Cryptography;
+using MatasanoCryptoChallenge;
+using MyCrypto;
 
-namespace MatasanoCryptoChallenge
+namespace Tests
 {
     public static class RandomEncryptor
     {
