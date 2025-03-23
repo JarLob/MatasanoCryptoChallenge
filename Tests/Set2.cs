@@ -37,7 +37,7 @@ namespace Tests
 
             Assert.Equal(data, decrypted);
 
-            cipher = Convert.FromBase64String(File.ReadAllText("10.txt"));
+            cipher = Convert.FromBase64String(File.ReadAllText("Data/10.txt"));
             using (var aes2 = Aes.Create())
             {
                 aes2.Key = Encoding.UTF8.GetBytes("YELLOW SUBMARINE");

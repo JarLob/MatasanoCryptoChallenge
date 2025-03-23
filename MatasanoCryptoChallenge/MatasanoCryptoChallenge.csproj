@@ -15,37 +15,37 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Update="10.txt">
+    <None Update="Data\10.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="17.txt">
+    <None Update="Data\17.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="19.txt">
+    <None Update="Data\19.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="20.txt">
+    <None Update="Data\20.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="4.txt">
+    <None Update="Data\4.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="6.txt">
+    <None Update="Data\6.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="7.txt">
+    <None Update="Data\7.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="8.txt">
+    <None Update="Data\8.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="FirstOrderStatistics.txt">
+    <None Update="Data\FirstOrderStatistics.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="SecondOrderStatistics.txt">
+    <None Update="Data\SecondOrderStatistics.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="ThirdOrderStatistics.txt">
+    <None Update="Data\ThirdOrderStatistics.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

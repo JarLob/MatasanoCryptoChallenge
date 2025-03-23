@@ -39,7 +39,7 @@ namespace Tests
         [Fact]
         public void Challenge04_FindXORInFile()
         {
-            var lines      = File.ReadAllLines("4.txt");
+            var lines      = File.ReadAllLines("Data/4.txt");
             var candidates = new List<(string line, byte key, double score)>(lines.Length);
             foreach (var line in lines)
             {
@@ -65,7 +65,7 @@ namespace Tests
             //Console.WriteLine(Utils.GetHammingDistance(Encoding.UTF8.GetBytes("this is a test"),
             //                                           Encoding.UTF8.GetBytes("wokka wokka!!!")));
 
-            var base64 = File.ReadAllText("6.txt").Replace("\n", "");
+            var base64 = File.ReadAllText("Data/6.txt").Replace("\n", "");
             var cipher = Convert.FromBase64String(base64);
 
             var len = Xor.GuessRepeatingKeyLength(cipher, 40);
@@ -80,7 +80,7 @@ namespace Tests
         [Fact]
         public void Challenge07_DecryptAesEcb()
         {
-            var base64 = File.ReadAllText("7.txt").Replace("\n", "");
+            var base64 = File.ReadAllText("Data/7.txt").Replace("\n", "");
             var cipher = Convert.FromBase64String(base64);
             Assert.Equal("I'm back and I'm ringin' the bell ",
                          Encoding.UTF8.GetString(MyAes.DecryptEcb(cipher,
@@ -90,7 +90,7 @@ namespace Tests
         [Fact]
         public void Challenge08_DetectEcb()
         {
-            var lines      = File.ReadAllLines("8.txt");
+            var lines      = File.ReadAllLines("Data/8.txt");
             var candidates = new Dictionary<int, double>(lines.Length);
 
             for (var i = 0; i < lines.Length; i++)

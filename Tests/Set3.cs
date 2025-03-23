@@ -55,7 +55,7 @@ namespace Tests
         [Fact]
         public void Challenge17_CBC_padding_oracle()
         {
-            var lines = File.ReadAllLines("17.txt");
+            var lines = File.ReadAllLines("Data/17.txt");
 
             using (var rnd = RandomNumberGenerator.Create())
             {
@@ -140,7 +140,7 @@ namespace Tests
         [Fact]
         public void Challenge19_Fixed_Nonce_CTR_Substitutions()
         {
-            var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("19.txt", 0);
+            var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("Data/19.txt", 0);
 
             var expectedChars = "0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-'\".,:;!? ";
 
@@ -180,7 +180,7 @@ namespace Tests
         [Fact]
         public void Challenge20_Fixed_Nonce_CTR_Statistically()
         {
-            var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("20.txt", 0);
+            var (encryptedLines, plainTextLines) = ReadAndEncryptWithCTR("Data/20.txt", 0);
 
             var minLength = encryptedLines.Min(x => x.Length);
             var maxLength = encryptedLines.Max(x => x.Length);
