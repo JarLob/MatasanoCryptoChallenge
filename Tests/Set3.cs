@@ -131,13 +131,6 @@ namespace Tests
             return (encryptedLines, plainTextLines);
         }
 
-        private readonly ITestOutputHelper output;
-
-        public Set3(ITestOutputHelper output)
-        {
-            this.output = output;
-        }
-
         [Fact]
         public void Challenge19_Fixed_Nonce_CTR_Substitutions()
         {
