@@ -273,20 +273,20 @@ namespace Tests
 
             Assert.Equal(HttpQuery.Compile(query), textQuery);
 
-            var oracle = new UserProfileOracle();
+            var userProfile = new UserProfile();
             // email=test@test.com&uid=10&role=user
-            var cipher = oracle.CreateFor("test@test.com");
-            Assert.Equal("test@test.com", oracle.Decrypt(cipher).First().value);
+            var cipher = userProfile.CreateFor("test@test.com");
+            Assert.Equal("test@test.com", userProfile.Decrypt(cipher).First().value);
 
             // email=foo22@bar.com&uid=10&role=user
-            var cipher1 = oracle.CreateFor("foo22@bar.com");
+            var cipher1 = userProfile.CreateFor("foo22@bar.com");
             // email=          admin&uid=10&role=user
-            var cipher2 = oracle.CreateFor("          admin\xb\xb\xb\xb\xb\xb\xb\xb\xb\xb\xb");
+            var cipher2 = userProfile.CreateFor("          admin\xb\xb\xb\xb\xb\xb\xb\xb\xb\xb\xb");
             cipher = new byte[16 * 3];
             Array.Copy(cipher1, cipher, 16 * 2); // email=foo22@bar.com&uid=10&role=
             Array.Copy(cipher2, 16, cipher, 16 * 2, 16); // email=foo22@bar.com&uid=10&role=admin
-            Assert.Equal("admin", oracle.Decrypt(cipher).Last().value);
-            Assert.Equal("foo22@bar.com", oracle.Decrypt(cipher).First().value);
+            Assert.Equal("admin", userProfile.Decrypt(cipher).Last().value);
+            Assert.Equal("foo22@bar.com", userProfile.Decrypt(cipher).First().value);
         }
 
         /*

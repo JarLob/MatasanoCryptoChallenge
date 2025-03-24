@@ -7,11 +7,11 @@ using MyCrypto;
 
 namespace Tests
 {
-    public class UserProfileOracle
+    public class UserProfile
     {
         private readonly byte[] Key;
 
-        public UserProfileOracle()
+        public UserProfile()
         {
             using (var rnd = RandomNumberGenerator.Create())
             {
