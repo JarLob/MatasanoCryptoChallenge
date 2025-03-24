@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using MyCrypto;
 
 namespace MatasanoCryptoChallenge
@@ -17,24 +16,24 @@ namespace MatasanoCryptoChallenge
             var blocks = encrypted.Length / 16;
             for (int block = blocks - 1; block >= 0; --block)
             {
-                Span<byte> prevBlock = new byte[16];
+                ReadOnlySpan<byte> realPrevBlock;
                 if (block == 0)
-                    iv.CopyTo(prevBlock);
+                    realPrevBlock = iv;
                 else
-                    encrypted.Slice((block - 1) * 16, 16).CopyTo(prevBlock);
+                    realPrevBlock = encrypted.Slice((block - 1) * 16, 16);
 
-                var blockCopy = new byte[16];
-                prevBlock.CopyTo(blockCopy);
-
-                for (int i = 15; i >= 0; --i,
-                                         blockCopy.CopyTo(prevBlock))
+                Span<byte> fakePrevBlock = new byte[16];
+                for (int i = 15; i >= 0; --i)
                 {
+                    realPrevBlock.CopyTo(fakePrevBlock);
+                    byte desiredPaddingValue = (byte)(16 - i);
+
                     // set bytes past the current index to produce needed padding as
                     // "0x02" or "0x03 0x03" or "0x04 0x04 0x04" etc.
                     // by using already decrypted values
                     for (int n = 15; n > i; --n)
                     {
-                        prevBlock[n] = (byte)(blockCopy[n] ^ decrypted[block * 16 + n] ^ (16 - i));
+                        fakePrevBlock[n] = (byte)(realPrevBlock[n] ^ decrypted[block * 16 + n] ^ desiredPaddingValue);
                     }
 
                     for (int b = 0; b <= 256; ++b)
@@ -42,20 +41,25 @@ namespace MatasanoCryptoChallenge
                         if (b == 256)
                             throw new Exception("byte wasn't found");
 
-                        prevBlock[i] = (byte)b;
-                        if (validateOracle(encrypted.Slice(block * 16, 16), prevBlock))
+                        fakePrevBlock[i] = (byte)b;
+                        if (validateOracle(encrypted.Slice(block * 16, 16), fakePrevBlock))
                         {
-                            if (i != 0)
+                            // once we have decrypted the last byte and desiredPaddingValue != 1 we force the padding value above
+                            // so we don't need the check
+                            if (i != 0 && desiredPaddingValue == 1)
                             {
                                 // We are looking for "0xAny 0x01" padding
-                                // But may accidentally find "0x02 0x02"
+                                // But may accidentally find "0x02 0x02" or "0x03 0x03 0x03" or etc.
                                 // Let's modify i - 1 byte. If the first case the byte is not used for padding and doesn't affect validation
-                                prevBlock[i - 1] += 1;
-                                if (!validateOracle(encrypted.Slice(block * 16, 16), prevBlock))
+                                fakePrevBlock[i - 1] += 1;
+                                if (!validateOracle(encrypted.Slice(block * 16, 16), fakePrevBlock))
                                     continue;
                             }
 
-                            decrypted[block * 16 + i] = (byte)(b ^ (16 - i) ^ blockCopy[i]);
+                            // At this point we know that b XOR D(encrypted) = desiredPaddingValue
+                            // However the real plaintext = realPrevBlock[i] XOR D(encrypted)
+                            // From two equations above: D(encrypted) = desiredPaddingValue XOR b = plaintext XOR realPrevBlock[i]
+                            decrypted[block * 16 + i] = (byte)(b ^ desiredPaddingValue ^ realPrevBlock[i]);
                             break;
                         }
                     }

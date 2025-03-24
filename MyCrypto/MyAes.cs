@@ -107,20 +107,23 @@ namespace MyCrypto
 
         public static byte[] _CustomEncryptCbcPkcs7(ReadOnlySpan<byte> data, ReadOnlySpan<byte> iv, byte[] key)
         {
+            byte[]? xored, encrypted;
             var len       = data.Length  / 16 + 1;
             var output    = new byte[len * 16];
             var prevBlock = iv;
             int i         = 0;
             for (; i < len - 1; i++)
             {
-                var xored     = Xor.ApplyFixed(prevBlock, data.Slice(i * 16, 16));
-                var encrypted = EncryptEcb(xored, key, PaddingMode.None);
+                xored     = Xor.ApplyFixed(prevBlock, data.Slice(i * 16, 16));
+                encrypted = EncryptEcb(xored, key, PaddingMode.None);
                 Array.Copy(encrypted, 0, output, i * 16, 16);
                 prevBlock = encrypted;
             }
 
             var padded = PKCS7.Pad(data.Slice(i * 16, data.Length % 16), 16);
-            Array.Copy(EncryptEcb(Xor.ApplyFixed(prevBlock, padded), key), 0, output, i * 16, 16);
+            xored = Xor.ApplyFixed(prevBlock, padded);
+            encrypted = EncryptEcb(xored, key);
+            Array.Copy(encrypted, 0, output, i * 16, 16);
             return output;
         }
 

@@ -13,7 +13,7 @@ namespace Tests
             {
                 var keyVal = pair.Split(keyValueDelimiter);
                 if (keyVal.Length != 2)
-                    throw new Exception();
+                    throw new Exception("Invalid data");
 
                 obj.Add((keyVal[0], keyVal[1]));
             }

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Security.Cryptography;
-using MatasanoCryptoChallenge;
 using MyCrypto;
 
 namespace Tests
@@ -27,10 +26,17 @@ namespace Tests
 
                 var m = rnd.GetInt(0, 1);
                 var mode = m % 2 == 0 ? CipherMode.CBC : CipherMode.ECB;
-                return (mode == CipherMode.CBC ? MyAes.EncryptCbcPkcs7(appended, IV, key) : MyAes.EncryptEcb(appended, key), mode);
+                if (mode == CipherMode.CBC)
+                {
+                    var iv = new byte[16];
+                    rnd.GetBytes(iv);
+                    return (MyAes.EncryptCbcPkcs7(appended, iv, key), mode);
+                }
+                else
+                {
+                    return (MyAes.EncryptEcb(appended, key), mode);
+                }
             }
         }
-
-        private static readonly byte[] IV = new byte[16];
     }
 }

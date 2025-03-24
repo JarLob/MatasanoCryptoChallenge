@@ -348,25 +348,26 @@ namespace MatasanoCryptoChallenge
         public static byte[] BreakRepeating(/*byte[]*/ReadOnlySpan<byte> cipher, int keyLength, string expectedChars = null)
         {
             var keySteam = new List<(byte key, double score)>[keyLength];
-            byte[] blockMinusOne = null, blockMinusTwo = null;
+            byte[] prevBlock = null, prevPrevBlock = null;
 
             for (int i = 0; i < keyLength; ++i)
             {
-                //var block = cipher.Where((x, n) => n % keyLength == i).ToArray();
-                var block = new byte[cipher.Length / keyLength + (cipher.Length % keyLength != 0 ? 1 : 0)];
+                // make a block that is the first byte of every block, and a block that is the second byte of every block, and so on.
+                //var transposedBlock = cipher.Where((x, n) => n % keyLength == i).ToArray();
+                var transposedBlock = new byte[cipher.Length / keyLength + (cipher.Length % keyLength != 0 ? 1 : 0)];
                 for (int j = i, b = 0; j < cipher.Length; j += keyLength, ++b)
                 {
-                    block[b] = cipher[j];
+                    transposedBlock[b] = cipher[j];
                 }
 
                 if (i == 0)
-                    keySteam[i] = XorBreaker.BestMatch(block, expectedChars);
+                    keySteam[i] = XorBreaker.BestMatch(transposedBlock, expectedChars);
                 else if (i == 1)
-                    keySteam[i] = XorBreaker.BestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1].First().key), x)).ToArray(), expectedChars);
+                    keySteam[i] = XorBreaker.BestMatch(transposedBlock.Select((x, n) => ((char)(prevBlock[n] ^ keySteam[i - 1].First().key), x)).ToArray(), expectedChars);
                 else
                 {
-                    var candidates = XorBreaker.BestMatch(block.Select((x, n) => ((char)(blockMinusTwo[n] ^ keySteam[i - 2].First().key),
-                                                                              (char)(blockMinusOne[n] ^ keySteam[i - 1].First().key), x))
+                    var candidates = XorBreaker.BestMatch(transposedBlock.Select((x, n) => ((char)(prevPrevBlock[n] ^ keySteam[i - 2].First().key),
+                                                                              (char)(prevBlock[n] ^ keySteam[i - 1].First().key), x))
                                                            .ToArray(), expectedChars);
 
                     //if (!candidates.Any())
@@ -376,16 +377,16 @@ namespace MatasanoCryptoChallenge
                     //}
 
                     if (!candidates.Any())
-                        candidates = XorBreaker.BestMatch(block.Select((x, n) => ((char)(blockMinusOne[n] ^ keySteam[i - 1].First().key), x)).ToArray(), expectedChars);
+                        candidates = XorBreaker.BestMatch(transposedBlock.Select((x, n) => ((char)(prevBlock[n] ^ keySteam[i - 1].First().key), x)).ToArray(), expectedChars);
 
                     if (!candidates.Any())
-                        candidates = XorBreaker.BestMatch(block, expectedChars);
+                        candidates = XorBreaker.BestMatch(transposedBlock, expectedChars);
 
                     keySteam[i] = candidates;
                 }
 
-                blockMinusTwo = blockMinusOne;
-                blockMinusOne = block;
+                prevPrevBlock = prevBlock;
+                prevBlock = transposedBlock;
             }
 
             return keySteam.Select(x => x.First().key).ToArray();
