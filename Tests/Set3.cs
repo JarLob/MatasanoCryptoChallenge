@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using MatasanoCryptoChallenge;
 using MyCrypto;
 using Xunit;
@@ -196,6 +197,117 @@ namespace Tests
                     // since we don't know the IV the first block will be a garbage
                     Assert.Equal(input.AsSpan(16), decrypted.Slice(16));
                 }
+            }
+        }
+
+        /*
+        Inspired by https://www.skullsecurity.org/2016/going-the-other-way-with-padding-oracles-encrypting-arbitrary-data and
+        https://blog.teddykatz.com/2019/11/23/json-padding-oracles.html
+
+        In the previous example we used a padding info leaking oracle to decrypt the message.
+
+        The same technique can be used to create an encrypted message that will be decrypted into a chosen plaintext!
+
+        If the IV is supplied with the encrypted message, we can produce a clean message.
+        If the IV is unknown (server only) one block will always contain garbage.
+
+        First, write a function that takes a user name ang produces a json in a form of `{ time: <timestamp>, username: <username> }`.
+        Where `time` is a unix timestamp when the json was generated.
+
+        Then write a function that parses the json and validates if the timestamp is not older that 30 days and the user name is "admin".
+
+        Call the first function to generate the json for user "anonymous" and CBC encrypt it with random Key and IV.
+        This is a server generated token.
+
+        Write a function that takes the token and returns true if it can decrypt it with the unknown to you Key and IV,
+        but returns false if the padding is invalid. This is a server side padding oracle you need to exploit.
+
+        To encrypt arbitrary text with a padding oracle:
+
+            * Select a string, P, that you want to generate ciphertext, C, for
+
+            * Pad the string to be a multiple of the blocksize, using appropriate padding,
+              then split it into blocks numbered from 1 to N
+
+            * Generate a block of random data (Cn - ultimately, the final block of ciphertext)
+
+            * For each block of plaintext, starting with the last one:
+
+                * Create a two-block string of ciphertext, C', by combining an empty block (00000...)
+                  with the most recently generated ciphertext block (Cn+1) (or the random one if it's the first round)
+
+                * Change the last byte of the empty block until the padding errors go away,
+                  then use math (see below for way more detail) to set the last byte to 2 and
+                  change the second-last byte till it works.
+                  Then change the last two bytes to 3 and figure out the third-last, fourth-last, etc.
+
+                * After determining the full block, XOR it with the plaintext block Pn to create Cn
+
+                * Repeat the above process for each block (prepend an empty block to the new ciphertext block, calculate it, etc)
+
+        To put that in English: each block of ciphertext decrypts to an unknown value,
+        then is XOR’d with the previous block of ciphertext.
+        By carefully selecting the previous block, we can control what the next block decrypts to.
+        Even if the next block decrypts to a bunch of garbage, it’s still being XOR’d to a value that we control,
+        and can therefore be set to anything we want.
+        */
+        [Fact]
+        public void Challenge17_3_CBC_padding_oracle_encrypt()
+        {
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                var iv = new byte[16];
+                rnd.GetBytes(iv);
+
+                bool ValidateOracle(ReadOnlySpan<byte> encrypted)
+                {
+                    try
+                    {
+                        MyAes.DecryptCbcPkcs7(encrypted, iv, key);
+                        return true;
+                    }
+                    catch (CryptographicException e) when (e.Message == "Padding is invalid and cannot be removed.")
+                    {
+                        return false;
+                    }
+                }
+
+                var anonymousJson = UserJsonToken.CreateFor("anonymous");
+                Assert.True(UserJsonToken.Validate(anonymousJson, "anonymous"));
+                var anonymousToken = MyAes.EncryptCbcPkcs7(Encoding.UTF8.GetBytes(anonymousJson), iv, key);
+
+                var payload = "\",\"user\":\"admin\"}";
+
+                while(true)
+                {
+                    try
+                    {
+                        var encryptedPayload = CbcPaddingOracle.Encrypt(Encoding.UTF8.GetBytes(payload), ValidateOracle);
+                        var encrypted = new byte[32 + encryptedPayload.Length];
+                        // The fact that two messages were encrypted with the same IV
+                        // means the blocks are the same for the same data (timestamps).
+                        // Cut the first two blocks of the anonymousToken chipher which ends at `"user":"an`
+                        Array.Copy(anonymousToken, encrypted, 32);
+                        // and append our encrypted `","user":"admin"}`
+                        encryptedPayload.CopyTo(encrypted.AsSpan(32));
+
+                        var decryptedPayload = Encoding.UTF8.GetString(MyAes.DecryptCbcPkcs7(encryptedPayload, iv, key));
+                        Assert.EndsWith(payload, decryptedPayload); // the first block is always garbage because we don't know the IV
+
+                        var decryptedJson = Encoding.UTF8.GetString(MyAes.DecryptCbcPkcs7(encrypted, iv, key));
+                        // we have two "user" fields in the json. The first one has a garbage value, but the second always wins
+                        Assert.True(UserJsonToken.Validate(decryptedJson, "admin"));
+                        break;
+                    }
+                    catch (JsonException)
+                    {
+                        // we have ~10% chance of success because the generated garbage block may be an invalid JSON string
+                        continue;
+                    }
+            }
             }
         }
 

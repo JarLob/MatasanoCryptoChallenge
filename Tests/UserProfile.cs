@@ -7,7 +7,7 @@ using MyCrypto;
 
 namespace Tests
 {
-    public class UserProfile
+    internal class UserProfile
     {
         private readonly byte[] Key;
 

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Tests
 {
-    public static class HttpQuery
+    internal static class HttpQuery
     {
         public static List<(string key, string value)> Parse(string query, char pairDelimiter = '&', char keyValueDelimiter = '=')
         {

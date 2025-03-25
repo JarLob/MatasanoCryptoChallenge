@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Tests
 {
-    public static class Hex
+    internal static class Hex
     {
         public static byte[] ToBytes(string hex)
         {

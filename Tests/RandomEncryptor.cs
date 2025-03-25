@@ -4,7 +4,7 @@ using MyCrypto;
 
 namespace Tests
 {
-    public static class RandomEncryptor
+    internal static class RandomEncryptor
     {
         public static (byte[] cipher, CipherMode mode) Encrypt(ReadOnlySpan<byte> plainText)
         {
