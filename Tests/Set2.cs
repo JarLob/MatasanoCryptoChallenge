@@ -194,7 +194,13 @@ namespace Tests
                 var key = new byte[16];
                 rnd.GetBytes(key);
 
-                Func<ReadOnlySpan<byte>, byte[]> encryptionOracle = data => MyAes.EncryptEcb(data, secretSuffix, key);
+                Func<ReadOnlySpan<byte>, byte[]> encryptionOracle = data =>
+                {
+                    byte[] combined = new byte[data.Length + secretSuffix.Length];
+                    data.CopyTo(combined);
+                    Array.Copy(secretSuffix, 0, combined, data.Length, secretSuffix.Length);
+                    return MyAes.EncryptEcb(combined, key);
+                };
 
                 var blockSize = AesOracle.GuessBlockSize(encryptionOracle);
                 Assert.Equal(16, blockSize);
@@ -206,7 +212,51 @@ namespace Tests
                 var calculatedPrefixLength = AesOracle.GetPrefixLength(blockSize, encryptionOracle);
                 Assert.Equal(0, calculatedPrefixLength);
 
-                var decrypted = AesOracle.ByteAtATimeEcb(blockSize, prefixLength: 0, encryptionOracle);
+                var decrypted = AesOracle.SuffixByteAtATime(blockSize, prefixLength: 0, encryptionOracle);
+                var plainText = Encoding.UTF8.GetString(decrypted);
+                var secretText = Encoding.UTF8.GetString(secretSuffix);
+                Assert.Equal(secretText, plainText);
+            }
+        }
+
+        /*
+        Byte-at-a-time CBC decryption (Simple)
+
+        Same technique can be applied to CBC mode. Think what are the differences.
+        */
+        [Fact]
+        public void Challenge12_2_Byte_at_a_time_CBC_decryption_simple()
+        {
+            var secretSuffix = Convert.FromBase64String(
+                "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK");
+
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                var key = new byte[16];
+                rnd.GetBytes(key);
+
+                var iv = new byte[16];
+                rnd.GetBytes(iv);
+
+                Func<ReadOnlySpan<byte>, byte[]> encryptionOracle = data =>
+                {
+                    byte[] combined = new byte[data.Length + secretSuffix.Length];
+                    data.CopyTo(combined);
+                    Array.Copy(secretSuffix, 0, combined, data.Length, secretSuffix.Length);
+                    return MyAes.EncryptCbcPkcs7(combined, iv, key);
+                };
+
+                var blockSize = AesOracle.GuessBlockSize(encryptionOracle);
+                Assert.Equal(16, blockSize);
+
+                var payload = new byte[3 * blockSize];
+                var encrypted = encryptionOracle(payload);
+                Assert.Equal(CipherMode.CBC, AesOracle.GuessMode(encrypted, blockSize));
+
+                var calculatedPrefixLength = AesOracle.GetPrefixLength(blockSize, encryptionOracle);
+                Assert.Equal(0, calculatedPrefixLength);
+
+                var decrypted = AesOracle.SuffixByteAtATime(blockSize, prefixLength: 0, encryptionOracle);
                 var plainText = Encoding.UTF8.GetString(decrypted);
                 var secretText = Encoding.UTF8.GetString(secretSuffix);
                 Assert.Equal(secretText, plainText);
@@ -322,7 +372,14 @@ namespace Tests
                     var prefix = new byte[prefixLength];
                     rnd.GetBytes(prefix);
 
-                    Func<ReadOnlySpan<byte>, byte[]> encryptionOracle = data => MyAes.EncryptEcb(prefix, data, secretSuffix, key);
+                    Func<ReadOnlySpan<byte>, byte[]> encryptionOracle = data =>
+                    {
+                        var appended = new byte[prefix.Length + data.Length + secretSuffix.Length];
+                        prefix.CopyTo(appended, 0);
+                        data.CopyTo(appended.AsSpan(prefix.Length));
+                        secretSuffix.CopyTo(appended.AsSpan(prefix.Length + data.Length));
+                        return MyAes.EncryptEcb(appended, key);
+                    };
 
                     var blockSize = AesOracle.GuessBlockSize(encryptionOracle);
                     Assert.Equal(16, blockSize);
@@ -334,7 +391,7 @@ namespace Tests
                     var calculatedPrefixLength = AesOracle.GetPrefixLength(blockSize, encryptionOracle);
                     Assert.Equal(prefixLength, calculatedPrefixLength);
 
-                    var decrypted = AesOracle.ByteAtATimeEcb(blockSize, calculatedPrefixLength, encryptionOracle);
+                    var decrypted = AesOracle.SuffixByteAtATime(blockSize, calculatedPrefixLength, encryptionOracle);
                     var plainText = Encoding.UTF8.GetString(decrypted);
                     var secretText = Encoding.UTF8.GetString(secretSuffix);
                     Assert.Equal(secretText, plainText);

@@ -34,28 +34,6 @@ namespace MyCrypto
             return output;
         }
 
-        public static byte[] EncryptEcb(ReadOnlySpan<byte> data, ReadOnlySpan<byte> dataSuffix, byte[] key)
-        {
-            var appended = new byte[data.Length + dataSuffix.Length];
-            data.CopyTo(appended);
-            dataSuffix.CopyTo(appended.AsSpan(data.Length));
-            return EncryptEcb(appended, key);
-        }
-
-        public static byte[] EncryptEcb(ReadOnlySpan<byte> dataPrefix, ReadOnlySpan<byte> data, ReadOnlySpan<byte> dataSuffix, byte[] key)
-        {
-            var appended = new byte[dataPrefix.Length + data.Length + dataSuffix.Length];
-            dataPrefix.CopyTo(appended);
-            data.CopyTo(appended.AsSpan(dataPrefix.Length));
-            dataSuffix.CopyTo(appended.AsSpan(dataPrefix.Length + data.Length));
-            return EncryptEcb(appended, key);
-        }
-
-        public static byte[] EncryptEcb(ReadOnlySpan<byte> data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
-        {
-            return EncryptEcb(data.ToArray(), key, padding);
-        }
-
         public static byte[] EncryptEcb(byte[] data, byte[] key, PaddingMode padding = PaddingMode.PKCS7)
         {
             return _LibraryEncrypt(data, null, key, CipherMode.ECB, padding);

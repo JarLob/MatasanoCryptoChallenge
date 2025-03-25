@@ -93,25 +93,35 @@ namespace MatasanoCryptoChallenge
             throw new Exception();
         }
 
-        public static ReadOnlySpan<byte> ByteAtATimeEcb(int blockSize, int prefixLength,
-                                                        Func<ReadOnlySpan<byte>, byte[]> encryptionOracle)
+        public static ReadOnlySpan<byte> SuffixByteAtATime(int blockSize, int prefixLength,
+                                                           Func<ReadOnlySpan<byte>, byte[]> encryptionOracle)
         {
             if (prefixLength < 0)
                 throw new Exception();
 
+            // detect suffix length
             var suffixLength = encryptionOracle(ReadOnlySpan<byte>.Empty).Length - prefixLength;
+            for (int s = 1; s <= blockSize; ++s)
+            {
+                var encryptedLen = encryptionOracle(new byte[s]).Length - prefixLength;
+                if (encryptedLen != suffixLength)
+                {
+                    suffixLength = encryptedLen - blockSize - s;
+                    break;
+                }
+            }
             var prefixPaddingLength = prefixLength > 0 ? blockSize - (prefixLength % blockSize) : 0;
 
             var buffer = new byte[prefixPaddingLength + blockSize - 1 + suffixLength];
             var cipherTexts = new byte[blockSize][];
 
             // build cipher texts with:
-            // 000000000000000u|nknownsuffix....|continues -> ndkwlrixmrvuqntv|oqlxgevzirnvarpx|ywbamrbqcoenzybr
-            // 00000000000000un|knownsuffix....c|ontinues
-            // 0000000000000unk|nownsuffix....co|ntinues
-            // 000000000000unkn|ownsuffix....con|tinues
+            // prefix...padding|000000000000000u|nknownsuffix....|continues...... -> ndkwlrixmrvuqntv|oqlxgevzirnvarpx|ywbamrbqcoenzybr
+            // prefix...padding|00000000000000un|knownsuffix....c|ontinues......
+            // prefix...padding|0000000000000unk|nownsuffix....co|ntinues......
+            // prefix...padding|000000000000unkn|ownsuffix....con|tinues......
             // etc
-            // unknownsuffix...|................|...........
+            // prefix...padding|unknownsuffix...|.continues......|
             for (int j = 0; j < blockSize; ++j)
             {
                 cipherTexts[j] = encryptionOracle(buffer.AsSpan(0, prefixPaddingLength + blockSize - 1 - j));
@@ -120,9 +130,13 @@ namespace MatasanoCryptoChallenge
             int i;
             for (i = 0; i < suffixLength; ++i)
             {
-                // For i == 0 take the encrypted part of |000000000000000u| where 'u' is the first character for unknown suffix
-                // etc
+                // For i == 0 take the encrypted part of the first block of the first element in cipherTexts (but skip prefix blocks),
+                // i.e. |000000000000000u| where 'u' is the first character for unknown suffix
+                // for i == 1 take the encrypted part of the first block of the _second_ element in cipherTexts,
+                // i.e. | 00000000000000un | where "un" are the first two characters for unknown suffix
                 // for i == 16 take the encrypted part of |nknownsuffix....| - the second block of the first item in the dictionary
+                // for i == 17 take the encrypted part of |knownsuffix....c| - the second block of the second item in the dictionary
+                // etc.
                 var dictionaryBlock = cipherTexts[i % blockSize].AsSpan(prefixLength + prefixPaddingLength + i / blockSize * blockSize, blockSize);
 
                 int guessedByte;
@@ -130,22 +144,25 @@ namespace MatasanoCryptoChallenge
                 {
                     buffer[prefixPaddingLength + blockSize - 1 + i] = (byte)guessedByte;
 
-                    // The guessed input block is always block size and the span window is moving byte by byte to the right:
-                    // 000000000000000X|nknownsuffix....|continues
-                    // ^
+                    // The guessed input block is always block size and
+                    // the span window is moving byte by byte to the right,
+                    // up to the block size and then again from the beginning of the block:
+                    // prefix...padding|000000000000000X|nknownsuffix....|continues
+                    //                  ^
                     // where X is the guessed byte
                     // then
-                    // 000000000000000u|Xknownsuffix....|continues
-                    //  ^
-                    // so the input becomes |00000000000000uX|
+                    // prefix...padding|000000000000000u|Xknownsuffix....|continues -> padding|00000000000000uX|knownsuffix....c|ontinues
+                    //                   ^
+                    // so the input becomes padding|00000000000000uX|
                     // where 'u' is already found byte
-                    // etc
-                    // 000000000000000u|nknownsuffix....|continues
-                    //                        ^
-                    // so the input becomes |suffix....contin|
+                    // etc. i.e. i == 23
+                    // prefix...padding|000000000000000u|nknownXuffix....|continues -> padding|00000000unknownX|uffix....contin|ues
+                    //                         ^
+                    // so the input becomes padding|000000000unknown|suffix....contiX|
                     // where 'unknown' are already found bytes
-                    var block2 = encryptionOracle(buffer.AsSpan(i, prefixPaddingLength + blockSize))
-                        .AsSpan(prefixLength + prefixPaddingLength, blockSize);
+                    var block2 = encryptionOracle(buffer.AsSpan(i % blockSize,
+                                                                prefixPaddingLength + i / blockSize * blockSize + blockSize))
+                        .AsSpan(prefixLength + prefixPaddingLength + i / blockSize * blockSize, blockSize);
                     if (AreBlocksEqual(dictionaryBlock, block2))
                     {
                         break;
@@ -153,10 +170,10 @@ namespace MatasanoCryptoChallenge
                 }
 
                 if (guessedByte == -1)
-                    break; // we hit the padding
+                    throw new Exception("Unexpected: the byte wasn't found");
             }
 
-            return PKCS7.StripPad(buffer.AsSpan(prefixPaddingLength + blockSize - 1, i));
+            return buffer.AsSpan(prefixPaddingLength + blockSize - 1, i);
         }
 
         private static bool AreBlocksEqual(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
