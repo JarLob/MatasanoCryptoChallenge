@@ -118,7 +118,7 @@ namespace Tests
         You can mount a padding oracle on any CBC block, whether it's padded or not.
         */
         [Fact]
-        public void Challenge17_CBC_padding_oracle()
+        public void Challenge17_CBC_padding_oracle_decrypt()
         {
             var lines = File.ReadAllLines("Data/17.txt");
 
@@ -150,8 +150,51 @@ namespace Tests
                     }
 
                     var encrypted = MyAes.EncryptCbcPkcs7(input, iv, key);
-                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, iv, ValidateOracle);
+                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, ValidateOracle, iv);
                     Assert.Equal(input, decrypted);
+                }
+            }
+        }
+
+        /*
+        Same as above but when we don't know IV (it is server only). The first block will be a garbage.
+        */
+        [Fact]
+        public void Challenge17_2_CBC_padding_oracle_decrypt_no_IV()
+        {
+            var lines = File.ReadAllLines("Data/17.txt");
+
+            using (var rnd = RandomNumberGenerator.Create())
+            {
+                //var input = Convert.FromBase64String(lines[rnd.GetInt(0, lines.Length)]);
+
+                foreach (var line in lines)
+                {
+                    var input = Convert.FromBase64String(line);
+
+                    var key = new byte[16];
+                    rnd.GetBytes(key);
+
+                    var iv = new byte[16];
+                    rnd.GetBytes(iv);
+
+                    bool ValidateOracle(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> _)
+                    {
+                        try
+                        {
+                            MyAes.DecryptCbcPkcs7(encrypted, iv, key);
+                            return true;
+                        }
+                        catch (CryptographicException e) when (e.Message == "Padding is invalid and cannot be removed.")
+                        {
+                            return false;
+                        }
+                    }
+
+                    var encrypted = MyAes.EncryptCbcPkcs7(input, iv, key);
+                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, ValidateOracle);
+                    // since we don't know the IV the first block will be a garbage
+                    Assert.Equal(input.AsSpan(16), decrypted.Slice(16));
                 }
             }
         }

@@ -5,20 +5,22 @@ namespace MatasanoCryptoChallenge
 {
     public static class CbcPaddingOracle
     {
-        public static ReadOnlySpan<byte> Decrypt(ReadOnlySpan<byte> encrypted, ReadOnlySpan<byte> iv,
-                                                 Func<ReadOnlySpan<byte>, ReadOnlySpan<byte>, bool> validateOracle)
+        public static ReadOnlySpan<byte> Decrypt(ReadOnlySpan<byte> encrypted,
+                                                 Func<ReadOnlySpan<byte>, ReadOnlySpan<byte>, bool> validateOracle,
+                                                 ReadOnlySpan<byte> iv = default)                                  
         {
             if (encrypted.Length % 16 != 0)
                 throw new Exception();
 
             var decrypted = new byte[encrypted.Length];
+            Span<byte> fakeEncrypted = new byte[16*2];
 
             var blocks = encrypted.Length / 16;
             for (int block = blocks - 1; block >= 0; --block)
             {
                 ReadOnlySpan<byte> realPrevBlock;
                 if (block == 0)
-                    realPrevBlock = iv;
+                    realPrevBlock = iv.IsEmpty ? new byte[16] : iv;
                 else
                     realPrevBlock = encrypted.Slice((block - 1) * 16, 16);
 
@@ -42,7 +44,9 @@ namespace MatasanoCryptoChallenge
                             throw new Exception("byte wasn't found");
 
                         fakePrevBlock[i] = (byte)b;
-                        if (validateOracle(encrypted.Slice(block * 16, 16), fakePrevBlock))
+                        fakePrevBlock.CopyTo(fakeEncrypted.Slice(0, 16));
+                        encrypted.Slice(block * 16, 16).CopyTo(fakeEncrypted.Slice(16, 16));
+                        if (validateOracle(fakeEncrypted, iv))
                         {
                             // once we have decrypted the last byte and desiredPaddingValue != 1 we force the padding value above
                             // so we don't need the check
@@ -52,7 +56,9 @@ namespace MatasanoCryptoChallenge
                                 // But may accidentally find "0x02 0x02" or "0x03 0x03 0x03" or etc.
                                 // Let's modify i - 1 byte. If the first case the byte is not used for padding and doesn't affect validation
                                 fakePrevBlock[i - 1] += 1;
-                                if (!validateOracle(encrypted.Slice(block * 16, 16), fakePrevBlock))
+                                fakePrevBlock.CopyTo(fakeEncrypted.Slice(0, 16));
+                                encrypted.Slice(block * 16, 16).CopyTo(fakeEncrypted.Slice(16, 16));
+                                if (!validateOracle(fakeEncrypted, iv))
                                     continue;
                             }
 
