@@ -151,7 +151,7 @@ namespace Tests
                     }
 
                     var encrypted = MyAes.EncryptCbcPkcs7(input, iv, key);
-                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, ValidateOracle, iv);
+                    var decrypted = AesOracle.PaddingDecryptCBC(encrypted, ValidateOracle, iv);
                     Assert.Equal(input, decrypted);
                 }
             }
@@ -193,7 +193,7 @@ namespace Tests
                     }
 
                     var encrypted = MyAes.EncryptCbcPkcs7(input, iv, key);
-                    var decrypted = CbcPaddingOracle.Decrypt(encrypted, ValidateOracle);
+                    var decrypted = AesOracle.PaddingDecryptCBC(encrypted, ValidateOracle);
                     // since we don't know the IV the first block will be a garbage
                     Assert.Equal(input.AsSpan(16), decrypted.Slice(16));
                 }
@@ -285,7 +285,7 @@ namespace Tests
                 {
                     try
                     {
-                        var encryptedPayload = CbcPaddingOracle.Encrypt(Encoding.UTF8.GetBytes(payload), ValidateOracle);
+                        var encryptedPayload = AesOracle.PaddingEncryptCBC(Encoding.UTF8.GetBytes(payload), ValidateOracle);
                         var encrypted = new byte[32 + encryptedPayload.Length];
                         // The fact that two messages were encrypted with the same IV
                         // means the blocks are the same for the same data (timestamps).
